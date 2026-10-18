@@ -79,7 +79,7 @@ class Town:
         self.col = None
         self.mats = {k: lib.pbr_material(ctx, k, name="MAT_world_" + k) for k in (
             "plaster", "limestone_wall", "rubble_stone", "cobblestone",
-            "roof_tiles", "wood_planks", "dirt_road", "dry_grass", "forest_floor", "cloth_wool")}
+            "roof_tiles", "wood_planks", "dirt_road", "dry_grass", "forest_floor", "cloth_wool", "cassock_black")}
         self._surface_detail()
         # Metal/glass remain texture-derived; no untextured default surfaces.
         for name, source, metal, rough, transmission in (
