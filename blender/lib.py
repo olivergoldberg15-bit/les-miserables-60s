@@ -87,12 +87,15 @@ def pbr_material(ctx, key, scale=1.0, name=None):
 
 def set_time_of_day(ctx, scene, key):
     import bpy
-    settings = {'dusk': ('dusk', .3, 1.5, (1, .58, .3)),
-                'night': ('night', .08, .1, (.35, .48, 1)),
-                'dawn': ('dawn', .35, 1.8, (1, .75, .5)),
-                'interior_candle': ('interior', .025, 0, (1, .5, .2)),
-                'interior_moon': ('night', .025, .08, (.35, .48, 1))}
-    hdri, strength, energy, color = settings[key]
+    # (hdri, background strength, sun/moon W/m2, colour, exposure stops).
+    # Night stays dark and blue but legible: moonlight plus a little exposure.
+    settings = {'dusk': ('dusk', .3, 1.5, (1, .58, .3), 0),
+                'night': ('night', .3, .7, (.35, .48, 1), 1.3),
+                'dawn': ('dawn', .35, 1.8, (1, .75, .5), 0),
+                'interior_candle': ('interior', .025, 0, (1, .5, .2), .8),
+                'interior_moon': ('night', .06, .8, (.35, .48, 1), 1.5)}
+    hdri, strength, energy, color, exposure = settings[key]
+    scene.view_settings.exposure = exposure
     world = bpy.data.worlds.get('World_' + key) or bpy.data.worlds.new('World_' + key)
     world.use_nodes = True
     nodes, links = world.node_tree.nodes, world.node_tree.links
