@@ -309,68 +309,91 @@ def _load_action(actor, clip):
         if action is None:
             raise RuntimeError(f'[actors] no animation action in {path}')
         from mathutils import Euler, Quaternion
+        # World-orientation retarget. Rocketbox clip files bind in the clip's own
+        # stance while avatars bind in T-pose, so copying rest-relative deltas leaves
+        # avatars in T-pose. Instead rebuild each source bone's posed orientation per
+        # frame from its curves, and solve the target basis that gives the target
+        # bone the same world orientation (both files share the Max biped node axes).
         target = {_bone_key(b.name): b for b in actor.rig.data.bones}
-        mapping, convert = {}, {}
+        mapping = {}
         for bone in source.data.bones:
             key = _bone_key(bone.name)
-            if key not in target:
-                if 'nub' in key or 'footsteps' in key:
-                    continue  # end markers and the Max footsteps helper deform nothing
+            if key in target:
+                mapping[bone.name] = target[key].name
+            elif not ('nub' in key or 'footsteps' in key):
                 raise RuntimeError(f'[actors] incompatible clip bone {bone.name}: {clip}')
-            mapping[bone.name] = target[key].name
-            # Clip and avatar FBX bones carry different rest bases. Retarget
-            # through the world-space rest difference: L_t = C L_s C^-1 with
-            # C = Rt^-1 Rs, so each bone turns the same way in the world.
-            rs = (source.matrix_world @ bone.matrix_local).to_quaternion()
-            rt = (actor.rig.matrix_world @ target[key].matrix_local).to_quaternion()
-            convert[bone.name] = rt.inverted() @ rs
-        scale = source.matrix_world.to_scale()[0] / actor.rig.matrix_world.to_scale()[0]
-        channels = {}
+        curves = {}
         for curve in action.fcurves:
             match = re.match(r'pose\.bones\["(.+?)"\]\.(rotation_quaternion|rotation_euler|location)$', curve.data_path)
             if match:
-                channels.setdefault(match.groups(), {})[curve.array_index] = curve
+                curves.setdefault(match.group(1), {}).setdefault(match.group(2), {})[curve.array_index] = curve
+        def ordered(bones):
+            depth = lambda b: 0 if b.parent is None else 1 + depth(b.parent)
+            return sorted(bones, key=depth)
+        src_bones, tgt_bones = ordered(source.data.bones), ordered(actor.rig.data.bones)
+        rest_s = {b.name: b.matrix_local.to_quaternion() for b in src_bones}
+        rest_t = {b.name: b.matrix_local.to_quaternion() for b in tgt_bones}
+        obj_s = source.matrix_world.to_quaternion()
+        obj_t = actor.rig.matrix_world.to_quaternion()
+        back = {v: k for k, v in mapping.items()}
+        root_t = tgt_bones[0].name
+        scale_s = source.matrix_world.to_scale()[0]
+        scale_t = actor.rig.matrix_world.to_scale()[0]
+        def basis_s(name, frame):
+            chans = curves.get(name, {})
+            if 'rotation_quaternion' in chans:
+                c = chans['rotation_quaternion']
+                return Quaternion([c[i].evaluate(frame) if i in c else (1 if i == 0 else 0) for i in range(4)]).normalized()
+            if 'rotation_euler' in chans:
+                c = chans['rotation_euler']
+                mode = source.pose.bones[name].rotation_mode
+                return Euler([c[i].evaluate(frame) if i in c else 0 for i in range(3)],
+                             mode if len(mode) == 3 else 'XYZ').to_quaternion()
+            return Quaternion()
+        first, last = (int(v) for v in action.frame_range)
+        frames = list(range(first, last + 1))
+        keys = {b.name: [] for b in tgt_bones if b.name in back}
+        bob = []
+        for frame in frames:
+            pose_s = {}
+            for b in src_bones:
+                local = basis_s(b.name, frame)
+                if b.parent is None:
+                    pose_s[b.name] = rest_s[b.name] @ local
+                else:
+                    pose_s[b.name] = pose_s[b.parent.name] @ rest_s[b.parent.name].inverted() @ rest_s[b.name] @ local
+            pose_t = {}
+            for b in tgt_bones:
+                rel = rest_t[b.name] if b.parent is None else (
+                    pose_t[b.parent.name] @ rest_t[b.parent.name].inverted() @ rest_t[b.name])
+                if b.name in back:
+                    pose_t[b.name] = obj_t.inverted() @ obj_s @ pose_s[back[b.name]]
+                    q = rel.inverted() @ pose_t[b.name]
+                    q.normalize()
+                    if keys[b.name] and keys[b.name][-1].dot(q) < 0:
+                        q.negate()  # continuous hemisphere for clean interpolation
+                    keys[b.name].append(q)
+                else:
+                    pose_t[b.name] = rel
+            # In-place vertical bob of the root in world space, scaled to the target.
+            src_root = back.get(root_t)
+            loc = curves.get(src_root, {}).get('location', {})
+            v = Vector([loc[i].evaluate(frame) if i in loc else 0 for i in range(3)])
+            world = obj_s @ rest_s[src_root] @ v * scale_s if src_root else Vector()
+            bob.append((rest_t[root_t].inverted() @ obj_t.inverted() @ Vector((0, 0, world.z))) / scale_t)
         result = bpy.data.actions.new(f'AN_{actor.name}_{clip}')
-        def write(bone_name, path, frames, values):
-            target_path = f'pose.bones["{mapping[bone_name]}"].{path}'
+        def write(bone_name, path, values):
+            data_path = f'pose.bones["{bone_name}"].{path}'
             for index in range(len(values[0])):
-                curve = result.fcurves.new(target_path, index=index, action_group=mapping[bone_name])
+                curve = result.fcurves.new(data_path, index=index, action_group=bone_name)
                 curve.keyframe_points.add(len(frames))
                 for point, frame, value in zip(curve.keyframe_points, frames, values):
                     point.co = (frame, value[index])
-                    point.interpolation = 'BEZIER'
-                    point.handle_left_type = point.handle_right_type = 'AUTO_CLAMPED'
+                    point.interpolation = 'LINEAR'
                 curve.update()
-        for (bone_name, path), curves in channels.items():
-            if bone_name not in mapping:
-                continue  # skipped helper bone
-            frames = sorted({p.co.x for c in curves.values() for p in c.keyframe_points})
-            c = convert[bone_name]
-            if path == 'location':
-                if _bone_key(bone_name) != 'bip01' and not any(t in _bone_key(bone_name) for t in ('hips', 'pelvis', 'root')):
-                    continue  # limbs are rotation-only; stray offsets would stretch bones
-                tbone = actor.rig.data.bones[mapping[bone_name]]
-                basis = actor.rig.matrix_world.to_3x3().normalized() @ tbone.matrix_local.to_3x3()
-                values = []
-                for f in frames:
-                    v = c @ (Vector([curves[i].evaluate(f) if i in curves else 0 for i in range(3)]) * scale)
-                    # In-place policy: keep only the vertical bob in world space.
-                    w = basis @ v
-                    values.append(basis.inverted() @ Vector((0, 0, w.z)))
-                write(bone_name, 'location', frames, values)
-                continue
-            values = []
-            for f in frames:
-                if path == 'rotation_quaternion':
-                    q = Quaternion([curves[i].evaluate(f) if i in curves else (1 if i == 0 else 0) for i in range(4)])
-                else:
-                    q = Euler([curves[i].evaluate(f) if i in curves else 0 for i in range(3)],
-                              source.pose.bones[bone_name].rotation_mode if len(source.pose.bones[bone_name].rotation_mode) == 3 else 'XYZ').to_quaternion()
-                out = c @ q.normalized() @ c.inverted()
-                if values and values[-1].dot(out) < 0:
-                    out.negate()  # keep quaternion hemisphere continuous for clean interpolation
-                values.append(out)
-            write(bone_name, 'rotation_quaternion', frames, values)
+        for bone_name, values in keys.items():
+            write(bone_name, 'rotation_quaternion', values)
+        write(root_t, 'location', bob)
         for pose_bone in actor.rig.pose.bones:
             pose_bone.rotation_mode = 'QUATERNION'
         result.use_fake_user = True
@@ -401,7 +424,10 @@ def play(actor, clip, start_frame, speed=1.0, loop=False):
     strip = track.strips.new(action.name, int(start_frame), action)
     strip.frame_start = float(start_frame)
     strip.scale = 1 / speed
-    strip.extrapolation = 'NOTHING'
+    # Hold the last pose until a later clip takes over, so gaps never snap to T-pose.
+    # The actor's first clip also holds backwards to cover the frames before it.
+    clips = [t for t in actor.rig.animation_data.nla_tracks if not t.name.startswith('authored_')]
+    strip.extrapolation = 'HOLD' if len(clips) == 1 else 'HOLD_FORWARD'
     strip.blend_type = 'REPLACE'
     if loop:
         duration = max(1, action.frame_range[1]-action.frame_range[0]) / speed
