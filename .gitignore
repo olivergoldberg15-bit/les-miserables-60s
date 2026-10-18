@@ -4,3 +4,4 @@ snaps/
 audio/lines/
 *.mp4
 audio/mix.wav
+.gstack/
