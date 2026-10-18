@@ -132,18 +132,18 @@
       "path": "Assets/Avatars/Adults/Male_Adult_13",
       "license": "MIT"
     },
-    "Male_Adult_17": {
-      "path": "Assets/Avatars/Adults/Male_Adult_17",
-      "license": "MIT"
-    },
     "Male_Adult_05": {
       "path": "Assets/Avatars/Adults/Male_Adult_05",
+      "license": "MIT"
+    },
+    "Male_Adult_03": {
+      "path": "Assets/Avatars/Adults/Male_Adult_03",
       "license": "MIT"
     }
   },
   "avatar_aliases": {
     "valjean": "Male_Adult_08",
-    "bishop": "Male_Adult_17",
+    "bishop": "Male_Adult_03",
     "gendarme_1": "Male_Adult_04",
     "gendarme_2": "Male_Adult_13",
     "gendarme_3": "Male_Adult_05"
