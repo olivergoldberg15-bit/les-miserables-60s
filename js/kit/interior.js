@@ -1,5 +1,5 @@
 ﻿import * as THREE from 'three';
-import { clamp, seeded, material, mesh, box, sphere, cylinder, ground, lightRig, suggestedLook } from './land.js';
+import { clamp, seeded, material, mesh, box, sphere, cylinder, ground, lightRig, suggestedLook, rubble } from './land.js';
 import { ironChain } from './town.js';
 
 function table(g, width = 2.5, depth = 1.05, height = .77) {
@@ -12,6 +12,10 @@ function windowWall(g, { width = 7, height = 3.3, z = -3, barred = false } = {})
   box(g, [width, bottom, .32], wall, [0, bottom / 2, z]); box(g, [width, height - top, .32], wall, [0, (height + top) / 2, z]);
   box(g, [width / 2 + x - w / 2, top - bottom, .32], wall, [(-width / 2 + x - w / 2) / 2, (top + bottom) / 2, z]);
   box(g, [width / 2 - x - w / 2, top - bottom, .32], wall, [(width / 2 + x + w / 2) / 2, (top + bottom) / 2, z]);
+  if(barred){
+    rubble(g,width,bottom,.32,[0,bottom/2,z]);rubble(g,width,height-top,.32,[0,(height+top)/2,z]);
+    rubble(g,width/2+x-w/2,top-bottom,.32,[(-width/2+x-w/2)/2,(top+bottom)/2,z]);rubble(g,width/2-x-w/2,top-bottom,.32,[(width/2+x+w/2)/2,(top+bottom)/2,z]);
+  }
   const frame = material(0x554534, 'wood'); for (const s of [-1, 1]) box(g, [.085, top - bottom + .15, .4], frame, [x + s * w / 2, (top + bottom) / 2, z]);
   for (const y of [bottom, top]) box(g, [w + .15, .08, .45], frame, [x, y, z]);
   const glass = box(g, [w - .06, top - bottom - .06, .02], new THREE.MeshPhysicalMaterial({ color:0x567b98, transparent:true, opacity:.35, roughness:.3 }), [x, (top + bottom) / 2, z + .02], 'window glass');
@@ -20,8 +24,8 @@ function windowWall(g, { width = 7, height = 3.3, z = -3, barred = false } = {})
   return { position:new THREE.Vector3(x,2.05,z),glass };
 }
 function bread(g, position) {
-  const loaf = sphere(g,.2,material(0x75502c,'bread'),position,'rye loaf'); loaf.scale.set(1.5,.72,.85);
-  const crust=material(0xb18a52,'bread'); for(let i=0;i<4;i++){ const slash=box(g,[.025,.014,.19],crust,[position[0]-.16+i*.105,position[1]+.13,position[2]],'scored crust'); slash.rotation.y=-.35; } return loaf;
+  const loaf = sphere(g,.22,material(0x75502c,'bread'),position,'rye loaf'); loaf.scale.set(1.08,.58,1.0);
+  const crust=material(0xb18a52,'bread'); for(let i=0;i<4;i++){ const slash=box(g,[.025,.014,.19],crust,[position[0]-.13+i*.085,position[1]+.122,position[2]],'scored crust'); slash.rotation.y=-.35; } return loaf;
 }
 function bowl(g, position) {
   const ceramic = material(0xb5a688,'plaster',{roughness:.58});
@@ -44,7 +48,7 @@ export function makeDiningRoom(opts={}) {
   for(let i=0;i<3;i++){const log=cylinder(group,.055,.065,.63,wood,[hearthX+(i-1)*.12,.14,-2.58]);log.rotation.z=Math.PI/2;log.rotation.y=(i-1)*.4;}
   const emberMat=material(0x9b3917,'earth',{emissive:0xc24712,emissiveIntensity:1.3}); for(let i=0;i<5;i++)sphere(group,.035,emberMat,[hearthX-.24+i*.12,.13,-2.5],'embers');
   const hearthLight=new THREE.PointLight(0xff9845,9,5,2);hearthLight.position.set(hearthX,.35,-2.35);group.add(hearthLight);
-  table(group,2.65,1.12,.78); const cloth=material(0xd4c7a9,'cloth');box(group,[2.35,.014,1.2],cloth,[0,.792,0],'linen cloth');for(const s of [-1,1])box(group,[2.35,.3,.015],cloth,[0,.65,s*.59],'hanging cloth');
+  table(group,2.65,1.12,.78); const cloth=material(0xd4c7a9,'cloth',{side:THREE.DoubleSide});const clothGeo=new THREE.PlaneGeometry(2.35,1.7,64,48);clothGeo.rotateX(-Math.PI/2);const cp=clothGeo.attributes.position,cu=clothGeo.attributes.uv;for(let i=0;i<cp.count;i++){const x=cp.getX(i),z=cp.getZ(i),d=Math.max(0,Math.abs(z)-.55);cp.setY(i,.795-d*.96+.006*Math.sin(x*32+z*7)+d*.06*Math.sin(x*39));cp.setZ(i,Math.sign(z)*(Math.min(Math.abs(z),.55)+d*.14));cu.setXY(i,x*6,z*6);}clothGeo.computeVertexNormals();mesh(group,clothGeo,cloth,[0,0,0],'soft folded linen cloth');
   const settings=[]; for(const z of [-.4,.4]) for(const x of [-.85,0,.85]) {settings.push(new THREE.Vector3(x,.804,z)); bowl(group,[x,.806,z]);wineGlass(group,[x+.18,.806,z*.6]);chair(group,x,Math.sign(z)*.94,z>0?0:Math.PI);}
   bread(group,[-.54,.95,.04]);const cheese=cylinder(group,.13,.14,.09,material(0xd3b36d,'cheese'),[.58,.851,.03],'cheese');
   const bottleMat=material(0x263526,'glass',{metalness:.1,roughness:.25});cylinder(group,.055,.06,.22,bottleMat,[.91,.92,-.05],'wine bottle');cylinder(group,.022,.026,.13,bottleMat,[.91,1.09,-.05]);cylinder(group,.023,.023,.025,material(0x806042,'wood'),[.91,1.165,-.05],'cork');
@@ -63,7 +67,7 @@ export function makeCellWall(opts={}) {
   const iron=material(0x303638,'metal',{metalness:.85});const ring=mesh(group,new THREE.TorusGeometry(.09,.018,8,20),iron,[-1.5,1.8,-.16],'chain wall ring');ironChain(group,[-1.5,1.75,-.08],1.5);
   const marks=[];const scratch=material(0xc6c3ad,'stone',{bumpScale:.002});
   // 19 groups of five marks. Each stroke grows from zero as progress advances.
-  for(let year=0;year<19;year++)for(let j=0;j<5;j++){const x=-1.15+(year%7)*.36+j*.052,y=1.72-Math.floor(year/7)*.33;const m=box(group,[j===4?.27:.009,.006,j===4?.008:.008],scratch,[x,y,-.228],'tally scratch');m.geometry.dispose();m.geometry=new THREE.BoxGeometry(j===4?.27:.009,j===4?.008:.18,.006);m.position.z=-.228;m.rotation.z=j===4?-.3:((year+j)%3-1)*.025;marks.push({mesh:m,x,y,diagonal:j===4});}
+  for(let year=0;year<19;year++)for(let j=0;j<5;j++){const x=-1.15+(year%7)*.36+j*.052,y=1.72-Math.floor(year/7)*.33;const m=box(group,[j===4?.27:.009,.006,j===4?.008:.008],scratch,[x,y,-.228],'tally scratch');m.geometry.dispose();m.geometry=new THREE.BoxGeometry(j===4?.27:.009,j===4?.008:.18,.006);m.position.z=-.13;m.rotation.z=j===4?-.3:((year+j)%3-1)*.025;marks.push({mesh:m,x,y,diagonal:j===4});}
   const key=new THREE.SpotLight(0x9db4ff,100,14,.43,.3,2);key.position.set(1.8,2.6,-1.3);key.target.position.set(-.8,.2,2.8);key.castShadow=true;key.shadow.mapSize.set(2048,2048);group.add(key,key.target,new THREE.HemisphereLight(0x8190a9,0x242521,.28));
   const update=(t=0,p=0)=>{const count=clamp(p)*marks.length;marks.forEach(({mesh:m,y,diagonal},i)=>{const s=clamp(count-i);m.visible=s>0;m.scale.set(diagonal?s:1,diagonal?1:s,1);m.position.y=diagonal?y:y+.09*(1-s);});};update();
   return {group,update,look:suggestedLook(true),anchors:{tallies:new THREE.Vector3(0,1.3,-.22),window:new THREE.Vector3(1.8,2.05,-.4),chain:new THREE.Vector3(-1.5,1,-.08)},parts:{marks:marks.map(m=>m.mesh),ring}};
