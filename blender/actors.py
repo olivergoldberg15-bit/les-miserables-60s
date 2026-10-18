@@ -497,11 +497,11 @@ def pose(actor, name, frame_start, frame_end):
         angles = {'leftarm': (0, -1.25, 0), 'rightarm': (0, 1.25, 0)}
         offset = Vector((0, 0, 0))
         if name == 'sleep':
-            angles.update(hips=(math.pi/2, 0, 0),
+            angles.update(hips=(math.pi/2 - .2, 0, 0),  # measured: pi/2 tipped the head 15 deg low
                           leftarm=(0, -1.05, -.35), rightarm=(0, 1.05, .35),
                           leftforearm=(-1.35, 0, 0), rightforearm=(-1.35, 0, 0))
-            # Pelvis about .95 m up: lying on a mattress top of ~.8 m (body ~.15 m thick).
-            offset.z = -.05
+            # Measured in CI: -.05 left the pelvis at 1.08 m; mattress+blanket top is .79 m.
+            offset.z = -.22
         elif name == 'held':
             angles.update(chest=(.28, 0, 0), head=(.25, 0, 0),
                           leftarm=(-.5, -1.1, 0), rightarm=(-.5, 1.1, 0),
