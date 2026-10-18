@@ -37,12 +37,12 @@ def generate(timing):
                 text = ' '.join((r'{\c&H0049C9EF&}' + escape(w['w']) + r'{\c&H00FFFFFF&}')
                                 if w['s'] <= start < w['e'] else escape(w['w']) for w in group)
                 event(start, end, text)
-        event(line['start'], line['end'], escape(line['id'].replace('_', ' ').upper()), 'Tag', 1)
     first = timing['lines'][0]
     event(0, first['start'], 'LES MISÉRABLES', 'Title')
     last = timing['lines'][-1]
-    cut = next((w['s'] for w in last['words'] if re.sub(r'\W', '', w['w']).lower() == 'says'), last['end'])
-    event(max(cut, last['end']), timing['duration'], 'To be continued', 'Title', 2)
+    # Hard cut to black at the end of "says", then the card fades in 0.6 s later.
+    cut = next((w['e'] for w in last['words'] if re.sub(r'\W', '', w['w']).lower() == 'says'), last['end'])
+    event(cut + 0.6, timing['duration'], r'{\fad(500,0)\i1}To be continued', 'Title', 2)
     return '\n'.join(lines) + '\n'
 
 
