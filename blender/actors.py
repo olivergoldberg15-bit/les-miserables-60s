@@ -308,41 +308,69 @@ def _load_action(actor, clip):
         action = source.animation_data.action if source.animation_data else None
         if action is None:
             raise RuntimeError(f'[actors] no animation action in {path}')
+        from mathutils import Euler, Quaternion
         target = {_bone_key(b.name): b for b in actor.rig.data.bones}
-        mapping = {}
+        mapping, convert = {}, {}
         for bone in source.data.bones:
             key = _bone_key(bone.name)
             if key not in target:
                 raise RuntimeError(f'[actors] incompatible clip bone {bone.name}: {clip}')
             mapping[bone.name] = target[key].name
-            # Shared skeleton expected: direct quaternion curves require the
-            # same local bone basis. Reject rather than silently twist limbs.
-            a, b = bone.matrix_local.to_quaternion(), target[key].matrix_local.to_quaternion()
-            if a.rotation_difference(b).angle > .02:
-                raise RuntimeError(f'[actors] rest basis mismatch for {bone.name}: {clip}')
-        result = action.copy()
-        result.name = f'AN_{actor.name}_{clip}'
-        for curve in list(result.fcurves):
-            match = re.match(r'pose\.bones\["(.+?)"\](.*)', curve.data_path)
-            if not match or match.group(2) == '.scale':
-                result.fcurves.remove(curve)
-                continue
-            bone_name, suffix = match.groups()
+            # Clip and avatar FBX bones carry different rest bases. Retarget
+            # through the world-space rest difference: L_t = C L_s C^-1 with
+            # C = Rt^-1 Rs, so each bone turns the same way in the world.
+            rs = (source.matrix_world @ bone.matrix_local).to_quaternion()
+            rt = (actor.rig.matrix_world @ target[key].matrix_local).to_quaternion()
+            convert[bone.name] = rt.inverted() @ rs
+        scale = source.matrix_world.to_scale()[0] / actor.rig.matrix_world.to_scale()[0]
+        channels = {}
+        for curve in action.fcurves:
+            match = re.match(r'pose\.bones\["(.+?)"\]\.(rotation_quaternion|rotation_euler|location)$', curve.data_path)
+            if match:
+                channels.setdefault(match.groups(), {})[curve.array_index] = curve
+        result = bpy.data.actions.new(f'AN_{actor.name}_{clip}')
+        def write(bone_name, path, frames, values):
+            target_path = f'pose.bones["{mapping[bone_name]}"].{path}'
+            for index in range(len(values[0])):
+                curve = result.fcurves.new(target_path, index=index, action_group=mapping[bone_name])
+                curve.keyframe_points.add(len(frames))
+                for point, frame, value in zip(curve.keyframe_points, frames, values):
+                    point.co = (frame, value[index])
+                    point.interpolation = 'BEZIER'
+                    point.handle_left_type = point.handle_right_type = 'AUTO_CLAMPED'
+                curve.update()
+        for (bone_name, path), curves in channels.items():
             if bone_name not in mapping:
-                raise RuntimeError(f'[actors] unmapped curve {curve.data_path}')
-            curve.data_path = f'pose.bones["{mapping[bone_name]}"]{suffix}'
-            # In-place policy: lock horizontal root channels in the bone's
-            # own rest basis, retaining vertical bob. Imported local Y may
-            # be vertical, so do not assume location channel Z is world up.
-            if suffix == '.location' and any(t in _bone_key(bone_name) for t in ('hips','pelvis','root')):
-                basis = source.matrix_world.to_3x3() @ source.data.bones[bone_name].matrix_local.to_3x3()
-                axis = basis.col[curve.array_index].normalized()
-                if abs(axis.z) < .5:
-                    for point in curve.keyframe_points:
-                        point.co.y = 0
-            for point in curve.keyframe_points:
-                point.interpolation = 'BEZIER'
-                point.handle_left_type = point.handle_right_type = 'AUTO_CLAMPED'
+                raise RuntimeError(f'[actors] unmapped curve for {bone_name}: {clip}')
+            frames = sorted({p.co.x for c in curves.values() for p in c.keyframe_points})
+            c = convert[bone_name]
+            if path == 'location':
+                if _bone_key(bone_name) != 'bip01' and not any(t in _bone_key(bone_name) for t in ('hips', 'pelvis', 'root')):
+                    continue  # limbs are rotation-only; stray offsets would stretch bones
+                tbone = actor.rig.data.bones[mapping[bone_name]]
+                basis = actor.rig.matrix_world.to_3x3().normalized() @ tbone.matrix_local.to_3x3()
+                values = []
+                for f in frames:
+                    v = c @ (Vector([curves[i].evaluate(f) if i in curves else 0 for i in range(3)]) * scale)
+                    # In-place policy: keep only the vertical bob in world space.
+                    w = basis @ v
+                    values.append(basis.inverted() @ Vector((0, 0, w.z)))
+                write(bone_name, 'location', frames, values)
+                continue
+            values = []
+            for f in frames:
+                if path == 'rotation_quaternion':
+                    q = Quaternion([curves[i].evaluate(f) if i in curves else (1 if i == 0 else 0) for i in range(4)])
+                else:
+                    q = Euler([curves[i].evaluate(f) if i in curves else 0 for i in range(3)],
+                              source.pose.bones[bone_name].rotation_mode if len(source.pose.bones[bone_name].rotation_mode) == 3 else 'XYZ').to_quaternion()
+                out = c @ q.normalized() @ c.inverted()
+                if values and values[-1].dot(out) < 0:
+                    out.negate()  # keep quaternion hemisphere continuous for clean interpolation
+                values.append(out)
+            write(bone_name, 'rotation_quaternion', frames, values)
+        for pose_bone in actor.rig.pose.bones:
+            pose_bone.rotation_mode = 'QUATERNION'
         result.use_fake_user = True
         return result
     finally:
