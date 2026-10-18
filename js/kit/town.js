@@ -25,7 +25,7 @@ function shutterWindow(g, x, y, z, scale = 1) {
 }
 function house(g, x, y, z, w, h, d, ochre = false) {
   const b = new THREE.Group(); b.position.set(x, y, z); g.add(b);
-  box(b, [w, h, d], material(ochre ? 0xb29970 : 0xbcb49e), [0, h / 2, 0], 'limestone house'); roof(b, w, d, h, material(0x92523b, 'tile'));
+  box(b, [w, h, d], material(ochre ? 0xb29970 : 0xbcb49e), [0, h / 2, 0], 'limestone house'); roof(b, w, d, h, material(0x753e2b, 'tile'));
   for (let floor = 0; floor < Math.floor(h / 2.2); floor++) for (const s of [-1, 1]) shutterWindow(b, s * w * .25, 1.5 + floor * 2, d / 2 + .04, .8);
   for(const side of [-1,1])for(let course=0;course<Math.floor(h/.38);course++){box(b,[course%2?.32:.48,.34,.17],material(0xb7ad96,'stone'),[side*(w/2-.15),.2+course*.38,d/2+.035],'limestone quoin');}
   box(b,[.4,.95,.42],material(0x897a65,'stone'),[w*.28,h+.48,-d*.22],'chimney');
@@ -38,16 +38,17 @@ export function makeTownDusk(opts = {}) {
   // Attached terraces step around a narrow winding street.
   for(let row=0;row<4;row++)for(const side of [-1,1])for(let col=0;col<3;col++){
     const z=-6-row*5.7,x=side*(4.25+col*4.15)+Math.sin(z*.17)*1.1;
-    house(group,x,elevation(x,z)+.05,z,4.2,4.4+Math.floor(random()*3)*1.95,5.6,random()>.45);
+    house(group,x,Math.min(...[-2.1,2.1].flatMap(dx=>[-2.8,2.8].map(dz=>elevation(x+dx,z+dz))))-.15,z,4.2,4.4+Math.floor(random()*3)*1.95,5.6,random()>.45);
   }
-  const cathedral = new THREE.Group(); cathedral.position.set(5.5, 1.4, -24); group.add(cathedral);
+  const cathedral = new THREE.Group(); cathedral.position.set(5.5, elevation(5.5,-24)-.2, -24); group.add(cathedral);
   const limestone = material(0xb0aa94, 'stone'); box(cathedral, [6, 6, 10], limestone, [0, 3, 0], 'cathedral nave'); roof(cathedral, 6, 10, 6, material(0x8e5842, 'tile'));
   box(cathedral, [2.8, 10, 2.8], limestone, [-2, 5, 3], 'cathedral bell tower');
   for (const x of [-2.7, -1.3]) box(cathedral, [.5, 1.3, .08], material(0x1d2529), [x, 8.6, 4.44], 'belfry opening');
   const towerRoof=new THREE.Group();towerRoof.position.set(-2,0,3);cathedral.add(towerRoof);roof(towerRoof,3.2,3.2,10,material(0x84503c,'tile')); box(cathedral, [.09, .8, .09], material(0x3f3c32, 'metal'), [-2, 11.25, 3]); box(cathedral, [.5, .08, .08], material(0x3f3c32, 'metal'), [-2, 11.4, 3]);
-  const roadGeo = new THREE.PlaneGeometry(3.2, 53, 2, 64); roadGeo.rotateX(-Math.PI / 2); roadGeo.translate(0, 0, 7); const rp = roadGeo.attributes.position; for (let i=0;i<rp.count;i++) {const z=rp.getZ(i);rp.setX(i,rp.getX(i)+Math.sin(z*.17)*1.1);rp.setY(i,elevation(rp.getX(i),z)+.08)}; roadGeo.computeVertexNormals(); mesh(group, roadGeo, material(0x8c8170,'cobble'), [0,0,0], 'road entering town');
-  for (const side of [-1, 1]) box(group, [.35, .23, 20], limestone, [side * 2, .115, 20], 'road wall');
-  mountains(group); group.add(makeSky().group); lightRig(group, { sunset: true, key: 3 });
+  const roadGeo = new THREE.PlaneGeometry(3.2, 53, 16, 64); roadGeo.rotateX(-Math.PI / 2); roadGeo.translate(0, 0, 7); const rp = roadGeo.attributes.position; for (let i=0;i<rp.count;i++) {const z=rp.getZ(i);rp.setX(i,rp.getX(i)+Math.sin(z*.17)*1.1);const x=rp.getX(i)-Math.sin(z*.17)*1.1;rp.setY(i,elevation(rp.getX(i),z)+.055-.035*Math.exp(-Math.pow((Math.abs(x)-.85)/.16,2)))}; roadGeo.computeVertexNormals(); mesh(group, roadGeo, material(0x8c7960,'earth'), [0,0,0], 'road entering town');
+  // Low scrub verges leave the packed dirt road open to the surrounding hillside.
+  const vergeRandom=seeded(62);for(let i=0;i<100;i++){const z=-12+vergeRandom()*44,x=(i%2?1:-1)*(1.85+vergeRandom()*.7)+Math.sin(z*.17)*1.1;const tuft=sphere(group,.11,material(0x746f48,'earth'),[x,elevation(x,z),z],'dry verge scrub');tuft.scale.set(1,.65,1);}
+  mountains(group); group.add(makeSky().group); lightRig(group, { sunset: true, key: 1.8 });
   return { group, look: suggestedLook(), anchors: { roadStart: new THREE.Vector3(0, 0, 22), roadEnd: new THREE.Vector3(0, 0, -5), town: new THREE.Vector3(0, 4, -18) } };
 }
 function facade(group, width = 6, height = 3.4, opening = 1.15, doorHeight = 2.12) {

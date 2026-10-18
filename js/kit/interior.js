@@ -24,8 +24,12 @@ function windowWall(g, { width = 7, height = 3.3, z = -3, barred = false } = {})
   return { position:new THREE.Vector3(x,2.05,z),glass };
 }
 function bread(g, position) {
-  const loaf = sphere(g,.22,material(0x75502c,'bread'),position,'rye loaf'); loaf.scale.set(1.08,.58,1.0);
-  const crust=material(0xb18a52,'bread'); for(let i=0;i<4;i++){ const slash=box(g,[.025,.014,.19],crust,[position[0]-.13+i*.085,position[1]+.122,position[2]],'scored crust'); slash.rotation.y=-.35; } return loaf;
+  // A 22 cm rye boule rests on the linen, with a flour-dusted scored crown.
+  const center=[position[0],.86,position[2]],loaf=sphere(g,.11,material(0x654020,'bread'),center,'rye loaf');loaf.scale.set(1,.5,1);
+  const flour=material(0xc5b58e,'bread'),score=material(0xa67b44,'bread');
+  for(let i=0;i<3;i++){const x=(i-1)*.047,slash=box(g,[.009,.003,.125],score,[center[0]+x,center[1]+.051,center[2]],'scored crust');slash.rotation.y=-.3;}
+  const random=seeded(87);for(let i=0;i<90;i++){const x=(random()-.5)*.18,z=(random()-.5)*.18,r2=(x*x+z*z)/(.11*.11);if(r2>.85)continue;const dust=sphere(g,.0014+random()*.0018,flour,[center[0]+x,center[1]+.055*Math.sqrt(1-r2)+.001,center[2]+z],'flour dust');dust.scale.y=.2;}
+  return loaf;
 }
 function bowl(g, position) {
   const ceramic = material(0xb5a688,'plaster',{roughness:.58});
