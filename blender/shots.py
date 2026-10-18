@@ -218,7 +218,7 @@ def build(ctx):
     prison, kennel = cue('rejected', 'prison'), cue('rejected', 'kennel')
     camera('rejected_inn', 'main_street', a, prison-1, loc=(-43, -4, 1.6), target=(-45, 0, 1.2), lens=35)
     camera('rejected_prison', 'prison', prison, kennel-1,
-           loc=(-22.7, 1.5, 1.7), target=(-25, -2.4, 1.2), lens=35)
+           loc=(-23.4, -.4, 1.65), target=(-25, -3, 1.35), lens=28)
     camera('rejected_kennel', 'kennel', kennel, b,
            loc=(-14, 3, 1.6), target=(-12, 6.1, .95), lens=32)
     # Dusk falls to night at the prison cut; all values come from the preset.

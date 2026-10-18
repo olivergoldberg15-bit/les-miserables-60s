@@ -107,6 +107,12 @@ def diagnose_animation(scene):
             if bone:
                 print(f'[diag]   f{frame} {bone.name} quat={tuple(round(v, 3) for v in bone.rotation_quaternion)} '
                       f'mode={bone.rotation_mode} basis_angle={bone.matrix_basis.to_quaternion().angle:.3f}', flush=True)
+        scene.frame_set(1006)
+        for key in ('pelvis', 'head', 'lfoot', 'rfoot'):
+            pb = next((x for x in rig.pose.bones if x.name.lower().replace(' ', '').endswith(key)), None)
+            if pb:
+                w = rig.matrix_world @ pb.head
+                print(f'[diag]   f1006 {pb.name} world=({w.x:.2f},{w.y:.2f},{w.z:.2f})', flush=True)
         names = [b.name for b in rig.pose.bones][:6]
         print(f'[diag]   bones {names}', flush=True)
 
