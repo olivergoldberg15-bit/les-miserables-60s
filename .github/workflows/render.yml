@@ -13,7 +13,7 @@ on:
         type: string
         default: '1,240,480,720,960,1200'
       chunks:
-        description: Full render chunks (1 to 20)
+        description: Full render chunks (1 to 100)
         type: number
         default: 20
         required: true
@@ -40,8 +40,8 @@ jobs:
           python - <<'PY'
           import json, os
           count = int(os.environ['CHUNKS'])
-          if not 1 <= count <= 20:
-              raise SystemExit('[build] chunks must be between 1 and 20')
+          if not 1 <= count <= 100:
+              raise SystemExit('[build] chunks must be between 1 and 100')
           if os.environ['MODE'] not in ('lookdev', 'stills', 'full'):
               raise SystemExit('[build] invalid mode')
           matrix = {'chunk': list(range(count if os.environ['MODE'] == 'full' else 1))}

@@ -9,8 +9,8 @@ from lib import Context, look_at, set_time_of_day
 
 
 def chunk_range(first, last, chunk, chunks):
-    if not 1 <= chunks <= 20 or not 0 <= chunk < chunks:
-        raise ValueError('[render] chunks must be 1..20; chunk must be 0..chunks-1')
+    if not 1 <= chunks <= 100 or not 0 <= chunk < chunks:
+        raise ValueError('[render] chunks must be 1..100; chunk must be 0..chunks-1')
     count = last - first + 1
     return first + count * chunk // chunks, first + count * (chunk + 1) // chunks - 1
 
@@ -18,12 +18,13 @@ def chunk_range(first, last, chunk, chunks):
 def configure(scene, preview):
     scene.render.engine = 'CYCLES'
     scene.cycles.device = 'CPU'
-    scene.cycles.samples = 24 if preview else 96
+    # Final: 32 adaptive samples + OIDN fits 1080p into GitHub's 6 h job limit (~3 min/frame).
+    scene.cycles.samples = 24 if preview else 32
     scene.cycles.use_adaptive_sampling = True
-    scene.cycles.adaptive_threshold = .03
+    scene.cycles.adaptive_threshold = .03 if preview else .04
     scene.cycles.use_denoising = True
     scene.cycles.denoiser = 'OPENIMAGEDENOISE'
-    scene.cycles.max_bounces = 6
+    scene.cycles.max_bounces = 6 if preview else 4
     scene.cycles.caustics_reflective = False
     scene.cycles.caustics_refractive = False
     scene.cycles.seed = 1815
