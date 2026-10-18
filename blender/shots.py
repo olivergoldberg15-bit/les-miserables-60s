@@ -158,7 +158,7 @@ def build(ctx):
     previous.inputs['Color'].default_value = (0, 0, 0, 1)
     previous.inputs['Strength'].default_value = 0
     policies = {'open': 'dusk', 'bread': 'night', 'years': 'interior_moon',
-                'passport': 'dusk', 'rejected': 'night', 'bishop': 'interior_candle',
+                'passport': 'dusk', 'rejected': 'dusk', 'bishop': 'interior_candle',
                 'door': 'night', 'dinner': 'interior_candle', 'night': 'interior_moon',
                 'bedside': 'interior_moon', 'steal': 'interior_moon', 'caught': 'dawn', 'cliff': 'dawn'}
     for sid in SHOT_IDS:
@@ -215,19 +215,45 @@ def build(ctx):
     half('valjean', (-51, -5, 0), a, b)
 
     a, b = ranges['rejected']
-    prison, kennel = cue('rejected', 'prison'), cue('rejected', "dog's")
+    prison, kennel = cue('rejected', 'prison'), cue('rejected', 'kennel')
     camera('rejected_inn', 'main_street', a, prison-1, loc=(-43, -4, 1.6), target=(-45, 0, 1.2), lens=35)
-    camera('rejected_prison', 'prison', prison, kennel-1)
-    camera('rejected_kennel', 'kennel', kennel, b)
+    camera('rejected_prison', 'prison', prison, kennel-1,
+           loc=(-22.7, 1.5, 1.7), target=(-25, -2.4, 1.2), lens=35)
+    camera('rejected_kennel', 'kennel', kennel, b,
+           loc=(-14, 3, 1.6), target=(-12, 6.1, .95), lens=32)
+    # Dusk falls to night at the prison cut; all values come from the preset.
+    night_world = lib.set_time_of_day(ctx, scene, 'night')
+    rejected_bg = nodes.new('ShaderNodeBackground')
+    rejected_env = nodes.new('ShaderNodeTexEnvironment')
+    rejected_env.image = night_world.node_tree.nodes['Environment'].image
+    links.new(rejected_env.outputs['Color'], rejected_bg.inputs['Color'])
+    rejected_bg.inputs['Strength'].default_value = night_world.node_tree.nodes['Background'].inputs['Strength'].default_value
+    night_mix = nodes.new('ShaderNodeMixShader')
+    links.new(previous.outputs[0], night_mix.inputs[1])
+    links.new(rejected_bg.outputs[0], night_mix.inputs[2])
+    for f, value in ((1, 0), (prison, 1), (b+1, 0)):
+        key(night_mix.inputs[0], 'default_value', value, f, True)
+    links.new(night_mix.outputs[0], output.inputs['Surface'])
+    sun = bpy.data.objects['TIME_SUN']
+    for path in ('energy', 'color'):
+        key(sun.data, path, getattr(sun.data, path), prison, True)
+    key(scene.view_settings, 'exposure', scene.view_settings.exposure, prison, True)
+    scene.world = master
     block('valjean', (-45, -1, 0), a, prison-1, 'idle_nervous', rot=math.pi)
-    block('valjean', (-25, -1.8, 0), prison, kennel-1, 'idle_nervous')
-    block('valjean', (-12, 3.5, 0), kennel, b, 'walk_weary', points=[(-12, 3.5, 0), (-12, 2.5, 0)])
+    block('valjean', (-25, -1.8, 0), prison, kennel-1, 'idle_nervous', rot=0)
+    block('valjean', (-12, 5.1, 0), kennel, b, 'idle_nervous', rot=math.pi,
+          points=[(-12, 5.1, 0), (-12, 4.4, 0)])
     door = bpy.data.objects['inn_door']
     key(door, 'rotation_euler', (0, 0, -1.1), a, True)
     key(door, 'rotation_euler', (0, 0, 0), word_end('rejected', 'Inns'))
     spill = light('INN_SPILL', (-45, .5, 2), (-45, -2, .5), a, prison-1, 90)
     key(spill.data, 'energy', 90, cue('rejected', 'Inns'))
-    key(spill.data, 'energy', 0, word_end('rejected', 'Inns'))
+    key(spill.data, 'energy', 8, word_end('rejected', 'Inns'))
+    light('INN_LANTERN_POOL', (-43.7, -1.2, 2.6), (-45, -1, 1), a, prison-1, 140)
+    light('PRISON_LANTERN_POOL', (-23.5, -.9, 2.6), (-25, -2, 1), prison, kennel-1,
+          160, (1, .55, .25), .3)
+    light('KENNEL_SUBJECT_MOON', (-10.2, 4.8, 3.6), (-12, 5, 1), kennel, b,
+          160, (.38, .53, 1), .6)
     wicket = bpy.data.objects['prison_wicket']
     key(wicket, 'location', (-24.45, -2.86, 1.52), a, True)
     key(wicket, 'location', (-25, -2.86, 1.52), word_end('rejected', 'prison'))
@@ -242,7 +268,7 @@ def build(ctx):
     half('bishop', (55.6, -2.9, 0), a, exterior-1)
 
     a, b = ranges['door']
-    camera('door', 'bishop_house', a, b, loc=(55, -12, 1), target=(57, -9.5, 1.4), lens=35)
+    camera('door', 'bishop_house', a, b, loc=(54.7, -12, 1.3), target=(57, -9.3, 1.35), lens=35)
     block('valjean', (57, -9.9, 0), a, b, 'knock', rot=math.pi)
     door = bpy.data.objects['bishop_street_door']
     key(door, 'rotation_euler', (0, 0, 0), a, True)
@@ -293,17 +319,34 @@ def build(ctx):
     block('valjean', (64, -6.4, .05), wake, b, 'idle_nervous', rot=math.pi)
 
     a, b = ranges['bedside']
-    camera('bedside', 'bishop_bedroom', a, b, lens=35)
-    block('bishop', (63.7, -1.4, .05), a, b, pose='sleep', rot=math.pi)
+    camera('bedside', 'bishop_bedroom', a, b, loc=(60.8, -2.5, 2.05),
+           target=(63.1, -1.1, 1.1), end_loc=(61.2, -2.3, 1.95), lens=30)
+    # Align the evaluated sleeping head to the actual modeled pillow, retaining
+    # pi yaw so the body follows the bed's long Y axis (head to the north).
+    sleeper = block('bishop', (63.7, -1.2, 0), a, b, pose='sleep', rot=math.pi)
+    scene.frame_set(a)
+    bpy.context.view_layer.update()
+    rig = actors.ACTORS['bishop'].rig
+    head_bone = actors._bone(rig, 'head')
+    head_pos = rig.matrix_world @ rig.pose.bones[head_bone.name].head
+    pillow = bpy.data.objects['bishop_bed_pillow']
+    rest = sleeper.location + Vector((pillow.location.x-head_pos.x,
+                                     pillow.location.y-head_pos.y,
+                                     pillow.location.z+.12-head_pos.z))
+    key(sleeper, 'location', rest, a, True)
     block('valjean', (62.1, -1.2, 0), a, b, pose='iron_candlestick_raised', rot=math.pi/2)
     prop('iron_candlestick', (62.5, -1.15, 1.65), a)
-    light('BEDSIDE_MOON', (63, .7, 2.2), (63.7, 0, .95), a, b, 45, (.4, .55, 1), .35)
-    half('bishop', (63.7, -1.4, .05), a, b, (.4, .55, 1))
+    # Narrow source just inside the real north window: no second face key.
+    light('BEDSIDE_MOON', (63, .7, 2.2), (63.7, -.42, .9), a, b,
+          180, (.4, .55, 1), .16)
 
     a, b = ranges['steal']
     jump = cue('steal', 'jumps')
     camera('steal_cupboard', 'bishop_bedroom', a, jump-1, target=(60.8, -.8, 1.15), lens=50)
-    camera('steal_wall', 'garden', jump, b)
+    camera('steal_wall', 'garden', jump, b, loc=(55.5, 14, 2.8),
+           target=(60, 19, 1.8), end_target=(60, 20, 1.2), lens=30)
+    light('VAULT_MOON_RIM', (62, 22, 5), (60, 19, 1.8), jump, b,
+          450, (.38, .53, 1), .6)
     block('valjean', (61.5, -.8, 0), a, jump-1, 'crouch_idle', rot=-math.pi/2)
     block('valjean', (60, 18, 0), jump, b, pose='vault', rot=math.pi)
     cupboard = bpy.data.objects['silver_cupboard_door']
@@ -320,28 +363,62 @@ def build(ctx):
             prop('%s_%d' % (kind, i), (-.025 if kind == 'fork' else .025, (i-3.5)*.011, .017+i*.004), ranges['night'][0])
 
     a, b = ranges['caught']
-    camera('caught', 'bishop_house', a, b, loc=(50, -15, 1.7), target=(54, -10.5, 1.1),
-           end_loc=(53, -15, 1.7), end_target=(57, -10.5, 1.1), lens=35)
-    for name, dx, dy in [('valjean', 0, 0), ('gendarme_1', -.65, 0), ('gendarme_2', .65, 0), ('gendarme_3', 0, -1)]:
-        pos = (54+dx, -10.5+dy, 0)
-        block(name, pos, a, b, 'walk_weary' if name == 'valjean' else 'walk', rot=-math.pi/2,
-              points=[pos, (57+dx, -10.5+dy, 0)])
-        half(name, pos, a, b, (1, .75, .5))
+    camera('caught', 'bishop_house', a, b, loc=(53, -16, 2), target=(57, -13.2, 1.2),
+           end_loc=(53, -13.5, 2), end_target=(57, -10.7, 1.2), lens=35)
+    # Forward is -Y: pi yaw faces the doorway to the north (+Y).
+    for name, dx, lead in [('valjean', 0, 0), ('gendarme_1', -.45, 0),
+                           ('gendarme_2', .45, 0), ('gendarme_3', 0, .85)]:
+        pos = (57+dx, -13.2+lead, 0)
+        block(name, pos, a, b, 'walk', rot=math.pi,
+              points=[pos, (57+dx, -10.7+lead, 0)],
+              pose='held' if name == 'valjean' else None)
+    rim = light('ESCORT_DAWN_BACKLIGHT', (58, -8.5, 4), (57, -12, 1.1),
+                a, b, 500, (1, .75, .5), .25)
+    for name in ('gendarme_1', 'gendarme_2', 'gendarme_3'):
+        scene.frame_set(a)
+        actors.face_light(name, rim)
+    half('valjean', (57, -13.2, 0), a, b, (1, .75, .5))
 
     a, b = ranges['cliff']
-    camera('cliff_threshold', 'dining_room', a, cue('cliff', 'bishop')-1,
-           loc=(57.8, -6, 1.6), target=(57, -10, 1.25), lens=35)
-    camera('cliff_bishop', 'dining_room', cue('cliff', 'bishop'), cut-1,
-           loc=(58.2, -6.3, 1.65), target=(56.5, -4.8, 1.55), lens=65)
-    block('bishop', (56.5, -4.8, 0), a, cut-1, 'idle', rot=.2)
-    root = actors.place('bishop', (56.5, -4.8, 0), .2)
-    key(root, 'rotation_euler', (0, 0, .2), cue('cliff', 'looks'))
-    key(root, 'rotation_euler', (.08, 0, -.15), cue('cliff', 'silver'))
-    key(root, 'rotation_euler', (0, 0, .35), cue('cliff', 'Valjean'))
-    half('bishop', (56.5, -4.8, 0), a, cut-1, (1, .75, .5))
-    for name, x, y in [('valjean', 57, -9.8), ('gendarme_1', 56.35, -10), ('gendarme_2', 57.65, -10), ('gendarme_3', 57, -11)]:
-        block(name, (x, y, 0), a, cut-1, pose='held' if name == 'valjean' else None, rot=math.pi)
-    prop('wicker_basket', (57, -8.8, .9), a)
+    reveal = cue('cliff', 'bishop')
+    camera('cliff_threshold', 'dining_room', a, reveal-1,
+           loc=(58.1, -6.5, 1.7), target=(57, -10.5, 1.2), lens=32)
+    # Reverse angle outside the opening, looking north at his south-facing face.
+    camera('cliff_bishop', 'bishop_house', reveal, cut-1,
+           loc=(58.4, -11.4, 1.65), target=(57, -8.55, 1.52),
+           end_loc=(57.65, -9.65, 1.62), end_target=(57, -8.55, 1.58), lens=55)
+    block('bishop', (57, -8.55, 0), a, cut-1, 'idle', rot=0)
+    half('bishop', (57, -8.55, 0), a, cut-1, (1, .75, .5))
+    for name, x, y in [('valjean', 57, -10.7), ('gendarme_1', 56.55, -10.7),
+                       ('gendarme_2', 57.45, -10.7), ('gendarme_3', 57.8, -10)]:
+        block(name, (x, y, 0), a, cut-1,
+              pose='held' if name == 'valjean' else None, rot=math.pi)
+    # The leading officer presents the basket at his near hand, below the bishop.
+    prop('wicker_basket', (57.5, -9.8, 1.02), a)
+    # Head tracking runs after the idle NLA, so the gaze survives clip evaluation.
+    scene.frame_set(a)
+    bishop = actors.ACTORS['bishop']
+    head = actors._bone(bishop.rig, 'head')
+    pb = bishop.rig.pose.bones[head.name]
+    gaze = bpy.data.objects.new('BISHOP_GAZE', None)
+    cams.objects.link(gaze)
+    for frame, target in ((a, (57, -10.7, 1.55)),
+                          (cue('cliff', 'looks'), (57.5, -9.8, 1.02)),
+                          (cue('cliff', 'silver'), (57.5, -9.8, 1.02)),
+                          (cue('cliff', 'Valjean'), (57, -10.7, 1.55)),
+                          (cut-1, (57, -10.7, 1.55))):
+        key(gaze, 'location', target, frame)
+    constraint = pb.constraints.new('DAMPED_TRACK')
+    constraint.name = 'Cliff_head_gaze'
+    constraint.target = gaze
+    # Determine the imported head's local forward axis from its world rest basis.
+    basis = (bishop.rig.matrix_world @ head.matrix_local).to_quaternion()
+    axes = {'TRACK_X': (1, 0, 0), 'TRACK_NEGATIVE_X': (-1, 0, 0),
+            'TRACK_Y': (0, 1, 0), 'TRACK_NEGATIVE_Y': (0, -1, 0),
+            'TRACK_Z': (0, 0, 1), 'TRACK_NEGATIVE_Z': (0, 0, -1)}
+    constraint.track_axis = max(axes, key=lambda axis: (basis @ Vector(axes[axis])).dot(Vector((0, -1, 0))))
+    for frame, value in ((1, 0), (a, 1), (cut, 0)):
+        key(constraint, 'influence', value, frame, True)
     key(door, 'rotation_euler', (0, 0, 0), a, True)
     key(door, 'rotation_euler', (0, 0, 0), cue('cliff', 'opens'))
     key(door, 'rotation_euler', (0, 0, 1.25), word_end('cliff', 'opens'))
