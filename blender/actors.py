@@ -314,6 +314,8 @@ def _load_action(actor, clip):
         for bone in source.data.bones:
             key = _bone_key(bone.name)
             if key not in target:
+                if 'nub' in key or 'footsteps' in key:
+                    continue  # end markers and the Max footsteps helper deform nothing
                 raise RuntimeError(f'[actors] incompatible clip bone {bone.name}: {clip}')
             mapping[bone.name] = target[key].name
             # Clip and avatar FBX bones carry different rest bases. Retarget
@@ -341,7 +343,7 @@ def _load_action(actor, clip):
                 curve.update()
         for (bone_name, path), curves in channels.items():
             if bone_name not in mapping:
-                raise RuntimeError(f'[actors] unmapped curve for {bone_name}: {clip}')
+                continue  # skipped helper bone
             frames = sorted({p.co.x for c in curves.values() for p in c.keyframe_points})
             c = convert[bone_name]
             if path == 'location':
