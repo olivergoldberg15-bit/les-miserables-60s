@@ -100,12 +100,27 @@ def _material(name, color, roughness=.85, metallic=0):
     return material
 
 
+def _region_mask(obj):
+    """Rocketbox packs clothes and hands into one body texture, so garment regions
+    come from dominant skin weights: R = bare skin, G = legs, B = feet."""
+    names = {g.index: _bone_key(g.name) for g in obj.vertex_groups}
+    attrs = obj.data.color_attributes
+    attr = attrs.get('period_region') or attrs.new('period_region', 'FLOAT_COLOR', 'POINT')
+    for v in obj.data.vertices:
+        key = names.get(max(v.groups, key=lambda g: g.weight).group, '') if v.groups else ''
+        feet = any(t in key for t in ('foot', 'toe'))
+        legs = not feet and any(t in key for t in ('thigh', 'calf', 'leg'))
+        skin = any(t in key for t in ('head', 'neck', 'hand', 'finger', 'thumb'))
+        attr.data[v.index].color = (float(skin), float(legs), float(feet), 1.0)
+
+
 def _wardrobe(actor, files):
     """Material-only treatment: never cut or replace the Rocketbox human."""
     copies = {}
     for obj in actor.imported:
         if obj.type != 'MESH':
             continue
+        _region_mask(obj)
         for slot in obj.material_slots:
             original = slot.material
             if original is None:
@@ -133,7 +148,7 @@ def _wardrobe(actor, files):
                 links.new(diffuse.outputs['Color'], shader.inputs['Base Color'])
                 incoming = next(iter(shader.inputs['Base Color'].links), None)
             # Cards must cast their cutout silhouette, never an opaque eye band.
-            if any(t in identity for t in ('lash', 'brow', 'hair')):
+            if any(t in identity for t in ('lash', 'brow', 'hair', 'opacity')):
                 opacity = next((n for n in images if 'opacity' in (n.image.name + n.image.filepath).lower()), None)
                 if opacity is None and diffuse:
                     stem = re.sub(r'(?i)(diffuse|albedo|basecolor|base_color).*', '', Path(diffuse.image.name).stem)
@@ -149,8 +164,11 @@ def _wardrobe(actor, files):
                         except Exception as exc:
                             print(f'[actors] WARNING opacity {path}: {exc}', flush=True)
                             opacity = None
-                if opacity or diffuse:
-                    links.new(opacity.outputs['Color'] if opacity else diffuse.outputs['Alpha'], shader.inputs['Alpha'])
+                # Rocketbox *_opacity_color.tga is 32-bit: the cutout lives in its alpha channel.
+                cutout = opacity or diffuse
+                if cutout:
+                    cutout.image.alpha_mode = 'STRAIGHT'
+                    links.new(cutout.outputs['Alpha'], shader.inputs['Alpha'])
                 # Blender 4.2 replaces the legacy HASHED enum with DITHERED.
                 if hasattr(material, 'surface_render_method'):
                     material.surface_render_method = 'DITHERED'
@@ -167,35 +185,45 @@ def _wardrobe(actor, files):
                     shader.inputs['IOR'].default_value = 1.376
                     if not diffuse:
                         shader.inputs['Base Color'].default_value = (1, 1, 1, 1)
-            if any(t in identity for t in ('skin', 'head', 'body', 'eye', 'cornea', 'hair', 'lash', 'brow', 'teeth', 'tooth')):
+            if any(t in identity for t in ('head', 'eye', 'cornea', 'hair', 'lash', 'brow', 'teeth', 'tooth', 'opacity')):
                 continue
-            lower = any(t in identity for t in ('trouser', 'pant', 'jeans', 'breech', 'leg'))
-            shoe = any(t in identity for t in ('shoe', 'boot', 'sole'))
-            color = ((.17, .105, .055) if actor.name == 'valjean' else
-                     (.012, .013, .017) if actor.name == 'bishop' else (.018, .035, .085))
-            if lower and actor.name != 'bishop':
-                color = (.035, .029, .024) if actor.name == 'valjean' else (.75, .72, .65)
-            if shoe:
-                color = (.025, .018, .014)
+            coat = ((.17, .105, .055) if actor.name == 'valjean' else
+                    (.012, .013, .017) if actor.name == 'bishop' else (.018, .035, .085))
+            legs = (coat if actor.name == 'bishop' else
+                    (.035, .029, .024) if actor.name == 'valjean' else (.75, .72, .65))
+            shoes = (.025, .018, .014)
             # Original luminance preserves modeled/painted folds and seams;
             # imported normal/bump connections remain completely untouched.
-            tint = nodes.new('ShaderNodeMixRGB')
-            tint.name = 'Period wool colour'
-            tint.blend_type = 'MULTIPLY'
-            tint.inputs[0].default_value = 1
-            tint.inputs[2].default_value = (*color, 1)
+            region = nodes.new('ShaderNodeAttribute')
+            region.attribute_type = 'GEOMETRY'
+            region.attribute_name = 'period_region'
+            split = nodes.new('ShaderNodeSeparateColor')
+            links.new(region.outputs['Color'], split.inputs[0])
+            def mix(fac, a, b, blend='MIX'):
+                node = nodes.new('ShaderNodeMixRGB')
+                node.blend_type = blend
+                for socket, value in ((node.inputs[0], fac), (node.inputs[1], a), (node.inputs[2], b)):
+                    if isinstance(value, tuple):
+                        socket.default_value = (*value, 1) if len(value) == 3 else value
+                    elif isinstance(value, (int, float)):
+                        socket.default_value = value
+                    else:
+                        links.new(value, socket)
+                return node.outputs[0]
+            garment = mix(split.outputs['Blue'], mix(split.outputs['Green'], coat, legs), shoes)
             if incoming:
                 luminance = nodes.new('ShaderNodeRGBToBW')
                 links.new(incoming.from_socket, luminance.inputs[0])
-                links.new(luminance.outputs[0], tint.inputs[1])
+                tinted = mix(1.0, luminance.outputs[0], garment, 'MULTIPLY')
+                # Bare skin (face, neck, hands) keeps the original texture.
+                links.new(mix(split.outputs['Red'], tinted, incoming.from_socket), shader.inputs['Base Color'])
             else:
                 base = shader.inputs['Base Color'].default_value
                 value = .2126*base[0] + .7152*base[1] + .0722*base[2]
-                tint.inputs[1].default_value = (value, value, value, 1)
-            links.new(tint.outputs[0], shader.inputs['Base Color'])
+                links.new(mix(1.0, (value, value, value), garment, 'MULTIPLY'), shader.inputs['Base Color'])
             for link in list(shader.inputs['Roughness'].links):
                 links.remove(link)
-            shader.inputs['Roughness'].default_value = .7 if shoe else .85
+            shader.inputs['Roughness'].default_value = .85
 
 
 def _accessory(actor, name, vertices, faces, material, bone):
