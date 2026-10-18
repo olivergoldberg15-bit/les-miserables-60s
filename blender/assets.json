@@ -136,25 +136,17 @@
       "path": "Assets/Avatars/Adults/Male_Adult_17",
       "license": "MIT"
     },
-    "Military_Male_01": {
-      "path": "Assets/Avatars/Professions/Military_Male_01",
-      "license": "MIT"
-    },
-    "Military_Male_02": {
-      "path": "Assets/Avatars/Professions/Military_Male_02",
-      "license": "MIT"
-    },
-    "Military_Male_03": {
-      "path": "Assets/Avatars/Professions/Military_Male_03",
+    "Male_Adult_05": {
+      "path": "Assets/Avatars/Adults/Male_Adult_05",
       "license": "MIT"
     }
   },
   "avatar_aliases": {
     "valjean": "Male_Adult_08",
     "bishop": "Male_Adult_17",
-    "gendarme_1": "Military_Male_01",
-    "gendarme_2": "Military_Male_02",
-    "gendarme_3": "Military_Male_03"
+    "gendarme_1": "Male_Adult_04",
+    "gendarme_2": "Male_Adult_13",
+    "gendarme_3": "Male_Adult_05"
   },
   "clips": {
     "walk": [
