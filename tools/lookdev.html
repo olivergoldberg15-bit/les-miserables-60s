@@ -11,7 +11,19 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 const q = new URLSearchParams(location.search);
 const v3 = (s) => s && new THREE.Vector3(...s.split(",").map(Number));
 const mod = await import(`../js/kit/${q.get("kit")}.js`);
-const out = await mod[q.get("fn")](JSON.parse(q.get("opts") || "{}"));
+let out = await mod[q.get("fn")](JSON.parse(q.get("opts") || "{}"));
+if (q.get("maker")) {
+  // figure kit: ?kit=figure&fn=loadFigures&maker=makeValjean&pose=walk&phase=0.3&rim=1
+  const fig = out[q.get("maker")]();
+  fig.pose(q.get("pose") || "stand", Number(q.get("phase") ?? 0));
+  const g = new THREE.Group(); g.add(fig.group);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(8, 8), new THREE.MeshStandardMaterial({ color: 0x5a5249, roughness: 0.95 }));
+  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; g.add(floor);
+  const key = new THREE.DirectionalLight(q.get("rim") ? 0xffb36b : 0xffffff, q.get("rim") ? 6 : 2.2);
+  key.position.set(q.get("rim") ? -1 : 2, 3, q.get("rim") ? -4 : 3); key.castShadow = true; g.add(key);
+  g.add(new THREE.HemisphereLight(0x8090b0, 0x302820, q.get("rim") ? 0.15 : 0.6));
+  out = { group: g, look: { bg: q.get("rim") ? 0x1a1e28 : 0x3a3f48 } };
+}
 const r = new THREE.WebGLRenderer({ canvas: document.getElementById("c"), antialias: true, preserveDrawingBuffer: true });
 r.setSize(1280, 720, false); r.toneMapping = THREE.ACESFilmicToneMapping; r.shadowMap.enabled = true; r.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene(); scene.add(out.group);
