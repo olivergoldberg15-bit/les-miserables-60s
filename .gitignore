@@ -5,3 +5,4 @@ audio/lines/
 *.mp4
 audio/mix.wav
 .gstack/
+__pycache__/
