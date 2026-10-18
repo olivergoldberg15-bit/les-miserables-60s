@@ -9,7 +9,7 @@ from pathlib import Path
 import random
 
 import bpy
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 try:
     from . import lib
@@ -55,16 +55,16 @@ LOOKDEV_CAMERAS = {
     "road": {"loc": (-158, -82, 29), "target": (-65, -5, 4), "lens_mm": 32, "time": "dusk"},
     "town_gate": {"loc": (-88, -20, 3), "target": (-70, -8, 3), "lens_mm": 35, "time": "dusk"},
     "main_street": {"loc": (-65, -7, 2), "target": (-20, -1, 3), "lens_mm": 30, "time": "night"},
-    "inn": {"loc": (-46, -9, 2.2), "target": (-45, 0, 2), "lens_mm": 38, "time": "night"},
-    "prison": {"loc": (-25, 3, 1.8), "target": (-25, -3, 1.5), "lens_mm": 36, "time": "night"},
+    "inn": {"loc": (-42, 1.4, 1.65), "target": (-47.8, 5.7, 1.15), "lens_mm": 26, "time": "interior_candle"},
+    "prison": {"loc": (-27.6, -7, 1.65), "target": (-24.5, -3.2, 1.5), "lens_mm": 28, "time": "interior_candle"},
     "kennel": {"loc": (-12, 2.3, 1.1), "target": (-12, 6.8, 0.6), "lens_mm": 35, "time": "night"},
     "cathedral": {"loc": (-24, -24, 16), "target": (2, 23, 17), "lens_mm": 34, "time": "night"},
     "hospital": {"loc": (111, -34, 11), "target": (90, 0, 6), "lens_mm": 40, "time": "dawn"},
     "bishop_house": {"loc": (49, -22, 4), "target": (60, -4, 3), "lens_mm": 40, "time": "dusk"},
     "dining_room": {"loc": (59.3, -7.6, 1.65), "target": (56, -2.6, 1.1), "lens_mm": 24, "time": "interior_candle"},
     "bishop_bedroom": {"loc": (60.7, -2.6, 1.65), "target": (63.6, -0.7, 1), "lens_mm": 24, "time": "interior_moon"},
-    "guest_alcove": {"loc": (60.8, -8.2, 1.5), "target": (64, -5.7, 0.8), "lens_mm": 24, "time": "interior_moon"},
-    "garden": {"loc": (53, 4, 3), "target": (61, 16, 1.2), "lens_mm": 30, "time": "night"},
+    "guest_alcove": {"loc": (61.3, -8.2, 1.5), "target": (64, -5.7, 0.8), "lens_mm": 24, "time": "interior_moon"},
+    "garden": {"loc": (55, 4, 2.3), "target": (61, 16, 1.2), "lens_mm": 30, "time": "night"},
     "bakery_flashback": {"loc": (-240, 82, 1.7), "target": (-240, 86, 1.5), "lens_mm": 40, "time": "night"},
     "galley_flashback": {"loc": (-237, 122, 1.6), "target": (-241, 127, 1.5), "lens_mm": 28, "time": "interior_moon"},
 }
@@ -77,9 +77,10 @@ class Town:
         self.assets = {}
         self.rng = random.Random(1815)
         self.col = None
-        self.mats = {k: lib.pbr_material(ctx, k) for k in (
+        self.mats = {k: lib.pbr_material(ctx, k, name="MAT_world_" + k) for k in (
             "plaster", "limestone_wall", "rubble_stone", "cobblestone",
             "roof_tiles", "wood_planks", "dirt_road", "dry_grass", "forest_floor", "cloth_wool")}
+        self._surface_detail()
         # Metal/glass remain texture-derived; no untextured default surfaces.
         for name, source, metal, rough, transmission in (
             ("iron", "limestone_wall", 1, .65, 0),
@@ -95,6 +96,82 @@ class Town:
                         mat.node_tree.links.remove(link)
                     bsdf.inputs[socket].default_value = value
             self.mats[name] = mat
+
+    def _surface_detail(self):
+        """Metre-space box mapping, shared textured plaster with ground weathering."""
+        for key, mat in self.mats.items():
+            nodes, links = mat.node_tree.nodes, mat.node_tree.links
+            geometry = nodes.new("ShaderNodeNewGeometry")
+            mapping = next(n for n in nodes if n.type == "MAPPING")
+            # Poly Haven architectural scans cover approximately 2m. World
+            # position prevents each 70m street strip stretching one texture.
+            links.new(geometry.outputs["Position"], mapping.inputs["Vector"])
+            mapping.inputs["Scale"].default_value = (.5, .5, .5)
+            if key != "plaster":
+                continue
+            bsdf = next(n for n in nodes if n.type == "BSDF_PRINCIPLED")
+            albedo = bsdf.inputs["Base Color"].links[0].from_socket
+            info = nodes.new("ShaderNodeObjectInfo")
+            tint = nodes.new("ShaderNodeValToRGB")
+            tint.color_ramp.elements[0].color = (.72, .59, .40, 1)
+            tint.color_ramp.elements[1].color = (.82, .81, .75, 1)
+            tint.color_ramp.elements.new(.5).color = (.95, .86, .67, 1)
+            links.new(info.outputs["Random"], tint.inputs["Fac"])
+            tinted = nodes.new("ShaderNodeMixRGB")
+            tinted.blend_type = "MULTIPLY"
+            tinted.inputs[0].default_value = .65
+            links.new(albedo, tinted.inputs[1])
+            links.new(tint.outputs["Color"], tinted.inputs[2])
+            separate = nodes.new("ShaderNodeSeparateXYZ")
+            links.new(geometry.outputs["Position"], separate.inputs[0])
+            gradient = nodes.new("ShaderNodeMapRange")
+            gradient.inputs["From Min"].default_value = .1
+            gradient.inputs["From Max"].default_value = 2.5
+            gradient.inputs["To Min"].default_value = .62
+            gradient.inputs["To Max"].default_value = 0
+            links.new(separate.outputs["Z"], gradient.inputs["Value"])
+            noise = nodes.new("ShaderNodeTexNoise")
+            noise.inputs["Scale"].default_value = 3
+            noise.inputs["Detail"].default_value = 3
+            links.new(geometry.outputs["Position"], noise.inputs["Vector"])
+            mask = nodes.new("ShaderNodeMath")
+            mask.operation = "MULTIPLY"
+            links.new(gradient.outputs["Result"], mask.inputs[0])
+            links.new(noise.outputs["Fac"], mask.inputs[1])
+            grime = nodes.new("ShaderNodeMixRGB")
+            grime.blend_type = "MULTIPLY"
+            links.new(mask.outputs[0], grime.inputs[0])
+            links.new(tinted.outputs[0], grime.inputs[1])
+            grime.inputs[2].default_value = (.22, .19, .13, 1)
+            links.new(grime.outputs[0], bsdf.inputs["Base Color"])
+
+    def mountain_material(self, key):
+        """Distance haze is a surface shader, with no CPU volume integration."""
+        name = key + "_distance"
+        if name in self.mats:
+            return name
+        mat = self.mats[key].copy()
+        mat.name = "MAT_world_" + name
+        nodes, links = mat.node_tree.nodes, mat.node_tree.links
+        output = next(n for n in nodes if n.type == "OUTPUT_MATERIAL")
+        surface = output.inputs["Surface"].links[0].from_socket
+        camera = nodes.new("ShaderNodeCameraData")
+        distance = nodes.new("ShaderNodeMapRange")
+        distance.inputs["From Min"].default_value = 250
+        distance.inputs["From Max"].default_value = 1000
+        distance.inputs["To Min"].default_value = .12
+        distance.inputs["To Max"].default_value = .85
+        links.new(camera.outputs["View Distance"], distance.inputs["Value"])
+        sky = nodes.new("ShaderNodeEmission")
+        sky.inputs["Color"].default_value = (.19, .25, .33, 1)
+        sky.inputs["Strength"].default_value = .45
+        mix = nodes.new("ShaderNodeMixShader")
+        links.new(distance.outputs["Result"], mix.inputs[0])
+        links.new(surface, mix.inputs[1])
+        links.new(sky.outputs[0], mix.inputs[2])
+        links.new(mix.outputs[0], output.inputs["Surface"])
+        self.mats[name] = mat
+        return name
 
     def location(self, name):
         self.col = self.ctx.col(name)
@@ -153,10 +230,12 @@ class Town:
                 [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
                  (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)], material)
         obj = self.obj(name, self.meshes[key], loc)
+        if material == "plaster":
+            bevel = .015
         if bevel:
             mod = obj.modifiers.new("worn_edges", "BEVEL")
             mod.width = bevel
-            mod.segments = 1
+            mod.segments = 2
         return obj
 
     def rod(self, name, a, b, radius, material="iron", sides=8):
@@ -277,7 +356,8 @@ class Town:
                 if isdoor:
                     self.door(name + "_door", cx, y, north=north)
                     continue
-                self.box(name + "_glass", (cx, y - sign * .12, (bottom + top) / 2), (ww, .025, top - bottom), "glass")
+                self.box(name + "_glass", (cx, y + sign * .02, (bottom + top) / 2), (ww, .025, top - bottom), "glass")
+                self.box(name + "_stone_lintel", (cx, y + sign * .10, top + .08), (1.3, .58, .16), "limestone_wall", .015)
                 self.box(name + "_sill", (cx, y + sign * .12, bottom), (1.2, .65, .13), "limestone_wall")
                 self.box(name + "_mullion", (cx, y, (bottom + top) / 2), (.055, .1, top - bottom), "wood_planks")
                 for side in (-1, 1):
@@ -286,11 +366,11 @@ class Town:
                     for zz in (bottom + .2, top - .2):
                         self.box(name + "_shutter_brace", (cx + side * .8, y + sign * .31, zz), (.46, .04, .07), "wood_planks")
 
-    def roof(self, name, x, y, width, depth, eave):
+    def roof(self, name, x, y, width, depth, eave, pitch=.27):
         # Two pitched planes plus continuous half-cylinder barrel courses.
-        rise = width * .27
-        verts = [(x + sx * (width / 2 + .3), y + sy * (depth / 2 + .3), eave)
-                 for sx in (-1, 1) for sy in (-1, 1)] + [(x, y - depth / 2 - .3, eave + rise), (x, y + depth / 2 + .3, eave + rise)]
+        rise = width * pitch
+        verts = [(x + sx * (width / 2 + .4), y + sy * (depth / 2 + .4), eave)
+                 for sx in (-1, 1) for sy in (-1, 1)] + [(x, y - depth / 2 - .4, eave + rise), (x, y + depth / 2 + .4, eave + rise)]
         self.obj(name + "_roof", self.mesh(name + "_roofmesh", verts, [(0, 4, 5, 1), (4, 2, 3, 5)], "roof_tiles"))
         gables = [(x - width / 2, y + side * depth / 2, eave)
                   for side in (-1, 1)] + [(x + width / 2, y + side * depth / 2, eave)
@@ -300,18 +380,35 @@ class Town:
                  [(0, 2, 4), (3, 1, 5)], "plaster"))
         verts, faces = [], []
         # Texture carries individual joints; batched geometry carries the barrel silhouette.
-        for yy in range(int((depth + .6) / .22)):
-            cy = y - depth / 2 - .2 + yy * .22
+        for yy in range(int((depth + .8) / .22)):
+            cy = y - depth / 2 - .3 + yy * .22
             for side in (-1, 1):
                 start = len(verts)
-                for xx in (0, width / 2 + .3):
+                for xx in (0, width / 2 + .4):
                     for k in range(7):
                         angle = math.pi * k / 6
-                        verts.append((x + side * xx, cy + .11 * math.cos(angle), eave + rise * (1 - xx / (width / 2 + .3)) + .11 * math.sin(angle)))
+                        verts.append((x + side * xx, cy + .11 * math.cos(angle), eave + rise * (1 - xx / (width / 2 + .4)) + .11 * math.sin(angle)))
                 faces.extend((start + k, start + k + 7, start + k + 8, start + k + 1) for k in range(6))
         self.obj(name + "_barrel_courses", self.mesh(name + "_barrels", verts, faces, "roof_tiles"))
 
+        for side in (-1, 1):
+            self.box(name + "_eave_fascia", (x + side * (width / 2 + .4), y, eave - .08),
+                     (.12, depth + .8, .22), "wood_planks", .015)
+        for end in (-1, 1):
+            for side in (-1, 1):
+                self.rod(name + "_raking_fascia", (x, y + end * (depth / 2 + .4), eave + rise),
+                         (x + side * (width / 2 + .4), y + end * (depth / 2 + .4), eave), .07, "wood_planks", 4)
+
     def house(self, name, x, y, w=7, d=8, floors=2, front_north=False):
+        before = set(self.col.objects)
+        rng = random.Random("Digne1815:" + name)
+        # Hero footprints retain door/window anchors; only the attached street
+        # houses vary their envelope. Their average 7m bay remains unchanged.
+        if name.startswith("street_house_"):
+            w *= rng.uniform(.96, 1.035)
+            d *= rng.uniform(.92, 1.08)
+            floors = rng.randint(2, 4)
+        pitch = rng.uniform(.23, .34)
         h = floors * 2.8
         self.facade(name, x, y - d / 2, w, h, door=not front_north, floors=floors)
         self.facade(name + "_rear", x, y + d / 2, w, h, north=True, door=front_north, floors=floors)
@@ -322,9 +419,29 @@ class Town:
                     self.box(name + "_quoin", (x + side * (w / 2 + .015), y + end * (d / 2 + .025), .18 + z * .36),
                              (.48 if z % 2 else .65, .46, .32), "limestone_wall")
         self.box(name + "_floor", (x, y, -.08), (w, d, .16), "cobblestone")
-        self.roof(name, x, y, w, d, h)
-        self.box(name + "_chimney", (x + w * .28, y + d * .22, h + 1.1), (.65, .7, 2.2), "limestone_wall")
-        self.box(name + "_chimney_cap", (x + w * .28, y + d * .22, h + 2.22), (.83, .85, .16), "roof_tiles")
+        # Plinths break at the active doorway; never obstruct the threshold.
+        for end in (-1, 1):
+            active = (end == 1) == front_north
+            if active:
+                for side in (-1, 1):
+                    self.box(name + "_plinth", (x + side * (w + 1.2) / 4, y + end * d / 2, .3),
+                             ((w - 1.2) / 2, .47, .6), "rubble_stone", .015)
+            else:
+                self.box(name + "_plinth", (x, y + end * d / 2, .3), (w, .47, .6), "rubble_stone", .015)
+        for side in (-1, 1):
+            self.box(name + "_plinth_side", (x + side * w / 2, y, .3), (.43, d, .6), "rubble_stone", .015)
+        self.roof(name, x, y, w, d, h, pitch)
+        chimney_base = h + w * pitch * .44
+        self.box(name + "_chimney", (x + w * .28, y + d * .22, chimney_base + .8), (.65, .7, 1.6), "limestone_wall", .015)
+        self.box(name + "_chimney_cap", (x + w * .28, y + d * .22, chimney_base + 1.62), (.83, .85, .16), "roof_tiles")
+        if name.startswith("street_house_"):
+            yaw = math.radians(rng.uniform(0, 1.5))
+            transform = Matrix.Translation((x, y, 0)) @ Matrix.Rotation(yaw, 4, "Z") @ Matrix.Translation((-x, -y, 0))
+            bpy.context.view_layer.update()
+            for obj in set(self.col.objects) - before:
+                if obj.parent is None:
+                    obj.matrix_world = transform @ obj.matrix_world
+
 
     def lantern(self, name, x, y, z):
         if not self.prop("lantern", name, (x, y, z), (.3, .3, .5), "iron"):
@@ -364,15 +481,44 @@ def _landscape(t):
             t.rod("roadside_rubble_wall", (a[0], a[1] + side * 4, a[2] + .25), (b[0], b[1] + side * 4, b[2] + .25), .35, "rubble_stone", 4)
         for offset in (-.85, .85):
             t.rod("wheel_rut", (a[0], a[1] + offset, a[2] + .012), (b[0], b[1] + offset, b[2] + .012), .07, "forest_floor", 4)
-    # Low-poly hills underneath the raised road; mountains never hero-detail.
-    for i, (x, y, z) in enumerate(points[:-1]):
-        v = [(x - 35, y - 28, -.1), (x + 35, y - 28, -.1), (x + 35, y + 28, -.1), (x - 35, y + 28, -.1), (x, y, z - .06)]
-        t.obj("dry_hill_%02d" % i, t.mesh("hill", v, [(0, 1, 4), (1, 2, 4), (2, 3, 4), (3, 0, 4)], "dry_grass"))
-    for i in range(20):
-        x, y = (-250 + i * 30, 180 + t.rng.uniform(-25, 60)) if i < 14 else (220 + t.rng.uniform(0, 50), (i - 14) * 40)
-        h = t.rng.uniform(65, 135)
-        v = [(x - 45, y - 30, -2), (x + 45, y - 30, -2), (x + 42, y + 30, -2), (x - 42, y + 30, -2), (x + 5, y, h)]
-        t.obj("Alps_%02d" % i, t.mesh("mountain", v, [(0, 1, 4), (1, 2, 4), (2, 3, 4), (3, 0, 4)], "limestone_wall"))
+    # Two continuous northern/eastern mountain belts, never isolated cones.
+    # Analytic broad ridges plus deterministic Clouds displacement give broken
+    # silhouettes without expensive far-field rocks or volumetric atmosphere.
+    for belt, (inner, outer, peak, key) in enumerate(((350, 570, 85, "dry_grass"), (590, 900, 140, "forest_floor"))):
+        segments, rows = 128, 12
+        verts, faces = [], []
+        for row in range(rows + 1):
+            u = row / rows
+            radius = inner + (outer - inner) * u
+            envelope = math.sin(math.pi * u) ** 1.25
+            for i in range(segments + 1):
+                angle = math.radians(-20 + 225 * i / segments)
+                ridge = .73 + .16 * math.sin(angle * 7 + belt) + .11 * math.sin(angle * 17 - belt)
+                verts.append((radius * math.cos(angle), 22 + radius * math.sin(angle), -4 + peak * envelope * ridge))
+        for row in range(rows):
+            for i in range(segments):
+                k = row * (segments + 1) + i
+                faces.append((k, k + 1, k + segments + 2, k + segments + 1))
+        obj = t.obj("distant_ridge_belt_%d" % belt, t.mesh("ridge_ground", verts, faces, t.mountain_material(key)))
+        for polygon in obj.data.polygons:
+            polygon.use_smooth = True
+        sub = obj.modifiers.new("terrain_subdivision", "SUBSURF")
+        sub.subdivision_type = "SIMPLE"
+        sub.levels = sub.render_levels = 2
+        clouds = bpy.data.textures.new("ridge_clouds_%d" % belt, type="CLOUDS")
+        clouds.noise_scale = 38 + belt * 13
+        clouds.noise_depth = 2
+        displace = obj.modifiers.new("eroded_ridge_noise", "DISPLACE")
+        displace.texture = clouds
+        displace.texture_coords = "GLOBAL"
+        displace.direction = "Z"
+        displace.strength = 22 + belt * 8
+        displace.mid_level = .5
+        # Fade displacement to zero at both belt boundaries.
+        group = obj.vertex_groups.new(name="ridge_envelope")
+        for row in range(rows + 1):
+            group.add(list(range(row * (segments + 1), (row + 1) * (segments + 1))), math.sin(math.pi * row / rows), "REPLACE")
+        displace.vertex_group = group.name
     for i in range(45):
         x, y = t.rng.uniform(-175, -85), t.rng.uniform(-66, -20)
         if not t.prop("rock_large", "road_rock", (x, y, .3), (.9, .7, .7), "limestone_wall"):
@@ -413,6 +559,29 @@ def _street(t):
     for x in (-48, -42):
         if not t.prop("barrel", "inn_barrel", (x, -.5, .5), (.65, .65, 1)):
             t.rod("inn_barrel", (x, -.5, 0), (x, -.5, 1), .34, "wood_planks", 12)
+    # Furnish the ground-floor inn as a real enclosed room for its inside camera.
+    t.box("inn_ground_ceiling", (-45, 4, 2.95), (9, 8, .18), "wood_planks")
+    for yy in (4.9, 6.5):
+        t.box("inn_hearth_jamb", (-48.85, yy, .65), (.65, .25, 1.3), "rubble_stone", .025)
+    t.box("inn_hearth_mantel", (-48.75, 5.7, 1.4), (1, 2, .2), "limestone_wall", .025)
+    t.box("inn_hearth_back", (-49.18, 5.7, .7), (.1, 1.4, 1.4), "forest_floor")
+    t.box("inn_hearth_stone", (-48.7, 5.7, .08), (1.3, 2, .16), "limestone_wall")
+    for yy in (5.4, 5.8, 6.1):
+        t.rod("inn_hearth_log", (-49, yy, .2), (-48.45, yy + .1, .3), .12, "wood_planks")
+    t.light("inn_hearth", (-48.5, 5.7, .55), 160, (1, .31, .08), .35)
+    if not t.prop("table", "inn_table", (-45, 4.2, .4), (2.2, 1.3, .8)):
+        t.box("inn_table_top", (-45, 4.2, .76), (2.2, 1.3, .12), "wood_planks", .025)
+        for xx in (-45.85, -44.15):
+            for yy in (3.75, 4.65):
+                t.box("inn_table_leg", (xx, yy, .36), (.12, .12, .72), "wood_planks")
+    for xx in (-46.6, -43.4):
+        if not t.prop("stool", "inn_stool", (xx, 4.2, .25), (.55, .55, .5)):
+            t.box("inn_stool_seat", (xx, 4.2, .48), (.55, .55, .1), "wood_planks", .02)
+            for dx in (-.2, .2):
+                t.box("inn_stool_leg", (xx + dx, 4.2, .24), (.08, .36, .48), "wood_planks")
+    t.box("inn_candle", (-45, 4.2, .98), (.075, .075, .3), "plaster", .025)
+    t.prop("candle_holder", "inn_candle_holder", (-45, 4.2, .85), (.16, .16, .16), "iron")
+    t.light("inn_table_candle", (-45, 4.2, 1.16), 12, (1, .55, .23), .045)
     t.location("prison")
     t.house("prison", -25, -7, 8, 8, 2, front_north=True)
     # Replace the generic front door with a framed opening and working wicket.
@@ -448,7 +617,16 @@ def _street(t):
                 faces.append((base + k * 4 + j, base + ((k + 1) % 12) * 4 + j,
                               base + ((k + 1) % 12) * 4 + (j + 1) % 4, base + k * 4 + (j + 1) % 4))
     t.obj("prison_bell_chain", t.mesh("chain_links", verts, faces, "iron"))
+    t.box("prison_ceiling", (-25, -7, 2.9), (8, 8, .2), "wood_planks")
+    t.box("prison_bench", (-28, -6.2, .48), (.65, 2.1, .14), "wood_planks", .02)
+    for yy in (-7, -5.4):
+        t.box("prison_bench_leg", (-28, yy, .22), (.45, .12, .44), "wood_planks")
+    t.lantern("prison_dim_lantern", -23, -4, 2.25)
+    prison_lamp = bpy.data.lights.get("LGT_Key_prison_dim_lantern")
+    if prison_lamp:
+        prison_lamp.energy = 18
     t.location("kennel")
+    t.light("kennel_moon_rim", (-10, 8.7, 4.5), 200, (.38, .53, 1), 2, (-12, 6.8, .65))
     t.box("kennel_yard", (-12, 6, .01), (7, 8, .1), "dirt_road")
     for x in (-15.5, -8.5):
         t.box("kennel_yard_wall", (x, 6, .85), (.4, 8, 1.7), "rubble_stone")
@@ -465,13 +643,26 @@ def _street(t):
 
 def _civic(t):
     t.location("cathedral")
-    t.house("cathedral_nave", 0, 24, 16, 28, 4)
+    t.box("cathedral_nave", (0, 24, 8), (16, 28, 16), "limestone_wall", .04)
+    t.roof("cathedral_nave", 0, 24, 16, 28, 16, .38)
+    # Limestone gables, side aisles and a deep stepped west portal.
+    gable = bpy.data.objects.get("cathedral_nave_gables")
+    gable.data.materials[0] = t.mats["limestone_wall"]
+    for side in (-1, 1):
+        t.box("cathedral_side_aisle", (side * 9, 24, 3.5), (3, 26, 7), "limestone_wall", .03)
+        for yy in (15, 21, 27, 33):
+            t.box("cathedral_lancet_recess", (side * 8.015, yy, 11.2), (.06, 1.3, 4), "glass")
+            t.box("cathedral_lancet_sill", (side * 8.12, yy, 9.15), (.35, 1.6, .2), "limestone_wall")
+    for xx in (-2.1, 2.1):
+        t.box("cathedral_portal_jamb", (xx, 9.65, 2.5), (.8, 1.1, 5), "limestone_wall", .04)
+    t.box("cathedral_portal_lintel", (0, 9.65, 5.1), (5, 1.1, .5), "limestone_wall", .04)
+    t.door("cathedral_door", 0, 9.38, 3.2, 4.8)
     t.box("cathedral_clock_tower", (8, 22, 17.5), (7.5, 8, 35), "limestone_wall", .06)
     for z in (9, 21, 31, 35):
         t.box("tower_cornice", (8, 22, z), (8.1, 8.6, .35), "limestone_wall")
     for x in (-8.5, 8.5):
         for y in (14, 22, 30, 36):
-            t.box("cathedral_buttress", (x, y, 4), (1.3, 1.4, 8), "limestone_wall")
+            t.box("cathedral_buttress", (x, y, 6.5), (1.3, 1.4, 13), "limestone_wall")
     for x in (6, 8, 10):
         t.box("belfry_recess", (x, 17.94, 32.5), (1, .06, 2.2), "wood_planks")
         for z in (31.7, 32.1, 32.5, 32.9, 33.3):
@@ -514,7 +705,7 @@ def _bishop(t):
     t.door("bishop_garden_door", 57, 1, north=True)
     for z, h in ((.5, 1), (2.65, .3)):
         t.box("bedroom_window_surround", (63, 1, z), (1.4, .4, h))
-    t.box("bedroom_window_glass", (63, 1.12, 1.75), (1.4, .025, 1.5), "glass")
+    t.box("bedroom_window_glass", (63, 1.02, 1.75), (1.4, .025, 1.5), "glass")
     t.box("bedroom_window_mullion", (63, 1, 1.75), (.07, .1, 1.5), "wood_planks")
     t.box("bedroom_window_sill", (63, 1, 1), (1.6, .65, .12), "limestone_wall")
     for x in (62, 64):
@@ -526,8 +717,17 @@ def _bishop(t):
         t.box("bishop_east_wall", (66, cy, 2.8), (.4, depth, 5.6))
     for z, h in ((.5, 1), (4, 3.2)):
         t.box("guest_window_surround", (66, -6, z), (.4, 1.2, h))
-    t.box("guest_window_glass", (66.12, -6, 1.7), (.025, 1.2, 1.4), "glass")
+    t.box("guest_window_glass", (66.02, -6, 1.7), (.025, 1.2, 1.4), "glass")
     t.box("bishop_first_floor", (60, -4, 2.95), (12, 10, .22), "wood_planks")
+    for yy in (-9, 1):
+        for xx, width in ((55.2, 2.4), (61.8, 8.4)):
+            t.box("bishop_house_plinth", (xx, yy, .3), (width, .47, .6), "rubble_stone", .015)
+    for xx in (54, 66):
+        t.box("bishop_house_side_plinth", (xx, -4, .3), (.47, 10, .6), "rubble_stone", .015)
+        for yy in (-9, 1):
+            for course in range(15):
+                t.box("bishop_house_quoin", (xx, yy, .18 + course * .36),
+                      (.65 if course % 2 else .48, .46, .32), "limestone_wall", .015)
     t.roof("bishop_house", 60, -4, 12, 10, 5.6)
     t.box("bishop_chimney", (54.7, -2, 6), (.85, 1.1, 3), "limestone_wall")
     t.location("dining_room")
@@ -574,10 +774,19 @@ def _bishop(t):
         v.co.y += .8
         v.co.z += 1
     door.location = (61.03, -1.6, 0)
+    t.light("bedroom_window_moon", (63, .75, 2.1), 240, (.36, .50, 1), .8, (63.7, -1.2, .6))
+    t.box("bedroom_candle_shelf", (65.4, -.3, .9), (.55, .45, .12), "wood_planks", .015)
+    t.prop("candle_holder", "bedroom_candle_holder", (65.4, -.3, 1.04), (.18, .18, .2), "iron")
+    t.box("bedroom_candle", (65.4, -.3, 1.22), (.065, .065, .24), "plaster", .02)
+    t.light("bedroom_candle", (65.4, -.3, 1.36), 3, (1, .52, .2), .04)
     t.location("guest_alcove")
+    t.light("guest_window_moon", (65.72, -6, 2.05), 220, (.36, .50, 1), .75, (63.7, -5.8, .6))
     t.box("guest_floor", (63, -6, -.06), (6, 6, .12), "wood_planks")
     t.bed("guest_bed", 64, -6)
+    t.lantern("guest_wall_lantern", 61.8, -8.65, 1.9)
+    bpy.data.lights["LGT_Key_guest_wall_lantern"].energy = 3
     t.location("garden")
+    t.light("garden_wall_moon_rim", (63, 22, 6), 300, (.38, .53, 1), 3, (60, 18.8, 1.5))
     t.box("garden_soil", (60, 10, -.02), (12, 18, .12), "forest_floor")
     t.box("garden_path", (60, 10, .05), (1.5, 18, .1), "dirt_road")
     for x in (54, 66):
