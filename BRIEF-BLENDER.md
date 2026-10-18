@@ -83,6 +83,30 @@ post/assemble.sh               frames -> video (24 fps) + grain/vignette + capti
 - Determinism: fixed seeds everywhere (`random.seed`, noise seeds); Cycles seed fixed per frame.
 - Performance: each frame must render in under about 3 minutes on a 4-vCPU runner at final settings (simplify far geometry, use instancing, 2k textures, limit light bounces to 6, caustics off).
 
+### The shared `ctx` object (built in build.py; helpers live in `blender/lib.py`)
+
+```python
+ctx.timing                      # dict loaded from data/timing.json
+ctx.fps = 24
+ctx.cue(line_id, word, nth=1)   # seconds; tolerant of case and punctuation; raises KeyError naming the cue
+ctx.frame(seconds)              # int frame (1-based, 24 fps)
+ctx.shot_range(shot_id)         # (first_frame, last_frame) per section 5's rule
+ctx.col(name)                   # bpy collection, created and linked under the scene if missing
+ctx.args                        # parsed CLI args: mode, frames, out, chunk, chunks
+ctx.assets.texture(key)         # {"albedo","normal","roughness","displacement"|None,"ao"|None} file paths
+                                # keys: plaster, limestone_wall, rubble_stone, cobblestone, roof_tiles,
+                                #       wood_planks, dirt_road, dry_grass, forest_floor, cloth_wool, cassock_black
+ctx.assets.hdri(key)            # path; keys: dusk, night, dawn, interior
+ctx.assets.model(key)           # path to .blend/.gltf/.fbx, or None if not available (caller falls back to procedural)
+                                # keys: table, chair, stool, barrel, crate, rock_large, shrub, candle_holder, lantern
+ctx.assets.rocketbox(name)      # {"fbx": path, "textures": dir}
+ctx.assets.rocketbox_anim(clip) # path to an FBX animation clip
+ctx.assets.font(key)            # path to a TTF; keys: garamond_regular, garamond_italic, garamond_semibold
+lib.pbr_material(ctx, key, scale=1.0, name=None)   # Principled BSDF material from ctx.assets.texture(key), box-projected, with displacement as bump
+lib.look_at(obj, target)        # aim a camera or light
+lib.set_time_of_day(ctx, scene, key)  # world HDRI + strength + sun for dusk/night/dawn/interior_candle/interior_moon
+```
+
 ## 7. CI contract (`.github/workflows/render.yml`)
 
 - `workflow_dispatch` inputs: `mode` (`lookdev` | `stills` | `full`), `frames` (comma list for stills), `chunks` (default 20).
