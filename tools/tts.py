@@ -13,22 +13,21 @@ SR = 48000
 
 # id, text, gap before (s). Scene turns get a longer breath.
 LINES = [
-    ("open",     "October 1815. A man walks into the town of Digne.", 0.9),
-    ("bread",    "Jean Valjean, who once stole bread for his sister's seven starving kids.", 0.30),
+    ("open",     "October 1815. An hour before sunset, a man walks into the town of Digne.", 0.9),
+    ("bread",    "Jean Valjean, who once stole a loaf of bread for his sister's seven starving kids.", 0.30),
     ("years",    "Five years for the bread. Four failed escapes made it nineteen.", 0.20),
     ("passport", "His yellow passport brands him a convict.", 0.30),
-    ("rejected", "Inns turn him away. So does the prison, and even a dog's kennel.", 0.25),
-    ("door",     "Then he knocks on Bishop Myriel's door.", 0.45),
-    ("dinner",   "He calls him sir, lights his silver candlesticks, and serves him dinner.", 0.25),
-    ("steal",    "That night, Valjean steals the bishop's silver and jumps the garden wall.", 0.45),
-    ("caught",   "By morning, police drag him back.", 0.40),
-    ("gift",     "The bishop says: \"I gave you the candlesticks too. Why didn't you take them?\"", 0.25),
-    ("soul",     "Then, quietly: \"You no longer belong to evil. I have bought your soul for God.\"", 0.45),
-    ("coin",     "That evening, he steps on a little boy's coin and keeps it.", 0.50),
-    ("weep",     "Then it breaks him. He weeps for the first time in nineteen years.", 0.35),
-    ("end",      "The convict dies on that road. What he becomes is Les Misérables.", 0.55),
+    ("rejected", "Inns turn him away. So does the prison, and even a dog's kennel.", 0.30),
+    ("bishop",   "Across town lives Bishop Myriel, who gave his palace to the hospital and never locks his door.", 0.45),
+    ("door",     "Valjean knocks.", 0.25),
+    ("dinner",   "The bishop calls him sir, lights his two silver candlesticks, and serves him dinner.", 0.40),
+    ("night",    "At two in the morning, the cathedral clock wakes him.", 0.45),
+    ("bedside",  "He stands over the sleeping bishop, an iron candlestick in his hand.", 0.35),
+    ("steal",    "Then he takes the silver and jumps the garden wall.", 0.40),
+    ("caught",   "By morning, police drag him back.", 0.50),
+    ("cliff",    "The door opens. The bishop looks at the silver. Then at Valjean. And he says...", 0.40),
 ]
-TAIL = 2.6
+TAIL = 4.6
 
 
 async def synth(text, mp3, tries=4):
@@ -67,7 +66,7 @@ def trim(x, thr=0.004):
     return x[a:b], a / SR
 
 
-SPEAK = {"open": "October, eighteen fifteen. A man walks into the town of Digne."}
+SPEAK = {"open": "October, eighteen fifteen. An hour before sunset, a man walks into the town of Digne."}
 MERGE = {("eighteen", "fifteen"): "1815"}
 
 
