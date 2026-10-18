@@ -1,0 +1,27 @@
+﻿<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Les Misérables</title>
+<style>
+@font-face{font-family:Garamond;src:url('node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-400-normal.woff2');font-weight:400}
+@font-face{font-family:Garamond;src:url('node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-500-normal.woff2');font-weight:500}
+@font-face{font-family:Garamond;src:url('node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-600-normal.woff2');font-weight:600}
+@font-face{font-family:Garamond;src:url('node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-400-italic.woff2');font-weight:400;font-style:italic}
+@font-face{font-family:Garamond;src:url('node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-500-italic.woff2');font-weight:500;font-style:italic}
+@font-face{font-family:Garamond;src:url('node_modules/@fontsource/eb-garamond/files/eb-garamond-latin-600-italic.woff2');font-weight:600;font-style:italic}
+@font-face{font-family:Inter;src:url('node_modules/@fontsource/inter/files/inter-latin-600-normal.woff2');font-weight:600}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#12151b}#root{position:relative;width:100%;height:100%;overflow:hidden}#gl,#ov{position:absolute;inset:0;width:100%;height:100%}#ov{pointer-events:none;color:white;font-family:Garamond,serif;text-shadow:0 2px 14px #000b}#chapter{position:absolute;left:88px;top:64px;font:600 22px Inter,sans-serif;letter-spacing:.18em;color:#ffffffb3;text-transform:uppercase}#captions{position:absolute;bottom:72px;left:210px;right:210px;text-align:center;font-size:46px;line-height:1.16;font-weight:500;height:110px;display:flex;align-items:center;justify-content:center}#captions p{margin:0;max-width:1450px}.current{color:#e8c37a}#callouts{position:absolute;left:110px;top:285px;max-width:850px;font-size:54px;line-height:1.16}#callouts p{margin:0 0 18px}.card{position:absolute;inset:0 90px 170px;display:flex;flex-direction:column;align-items:center;justify-content:center}.card h1{font-size:96px;letter-spacing:.11em;font-weight:600;margin:0}.card p{font-size:34px;letter-spacing:.14em;margin:18px 0 0}
+</style>
+<script type="importmap">{"imports":{"three":"./node_modules/three/build/three.module.js","three/addons/":"./node_modules/three/examples/jsm/"}}</script>
+</head><body>
+<div id="root" data-composition-id="lesmis" data-start="0" data-width="1920" data-height="1080" data-duration="59.66">
+<canvas id="gl" width="1920" height="1080"></canvas>
+<div id="ov"><div id="chapter"></div><div id="callouts"></div><div id="title" class="card"><h1>LES MISÉRABLES</h1><p>Victor Hugo · 1862</p></div><div id="end" class="card"><h1>LES MISÉRABLES</h1><p>Victor Hugo · 1862</p></div><div id="captions"></div></div>
+<audio id="mix" src="audio/mix.wav" data-start="0" data-duration="59.66" data-track-index="1"></audio>
+</div>
+<script src="vendor/gsap.min.js"></script><script src="data/timing.js"></script>
+<script>
+window.__hf=window.__hf||{};window.__hf.buildReady=window.__hf.buildReady||{};
+window.__hf.buildReady.lesmis=new Promise(res=>{window.__lmReady=res;});
+window.__timelines=window.__timelines||{};
+const tl=gsap.timeline({paused:true,onUpdate:()=>window.__lmRender&&window.__lmRender(tl.time())});
+tl.to({t:0},{t:1,duration:59.66,ease:'none'});window.__timelines.lesmis=tl;
+</script><script type="module" src="js/main.js"></script></body></html>
