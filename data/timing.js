@@ -7,7 +7,7 @@ window.TIMING = {
    "id": "open",
    "text": "October 1815. A man walks into the town of Digne.",
    "start": 0.9,
-   "end": 5.0,
+   "end": 5,
    "words": [
     {
      "w": "October",
@@ -547,7 +547,7 @@ window.TIMING = {
      "e": 35.669
     },
     {
-     "w": "I",
+     "w": "\"I",
      "s": 36.148,
      "e": 36.228
     },
@@ -597,7 +597,7 @@ window.TIMING = {
      "e": 38.754
     },
     {
-     "w": "them?",
+     "w": "them?\"",
      "s": 38.768,
      "e": 38.98
     }
@@ -620,7 +620,7 @@ window.TIMING = {
      "e": 40.759
     },
     {
-     "w": "You",
+     "w": "\"You",
      "s": 41.344,
      "e": 41.437
     },
@@ -680,7 +680,7 @@ window.TIMING = {
      "e": 44.642
     },
     {
-     "w": "God.",
+     "w": "God.\"",
      "s": 44.655,
      "e": 45.027
     }
@@ -829,7 +829,7 @@ window.TIMING = {
   },
   {
    "id": "end",
-   "text": "The convict dies on that road. What he becomes is Les Mis\u00e9rables.",
+   "text": "The convict dies on that road. What he becomes is Les Misérables.",
    "start": 53.333,
    "end": 57.064,
    "words": [
@@ -889,7 +889,7 @@ window.TIMING = {
      "e": 56.327
     },
     {
-     "w": "Mis\u00e9rables.",
+     "w": "Misérables.",
      "s": 56.34,
      "e": 56.952
     }

@@ -91,8 +91,10 @@ def attach_punct(words, text):
         if k < 0:
             w["d"] = w["w"]; continue
         j = k + len(w["w"])
-        while j < len(text) and text[j] in ",.?!:;":
+        while j < len(text) and text[j] in ",.?!:;\"”":
             j += 1
+        while k > 0 and text[k - 1] in "\"“":
+            k -= 1
         w["d"] = text[k:j]; cur = j
 
 
