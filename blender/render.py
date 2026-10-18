@@ -78,7 +78,7 @@ def render_lineup(bpy, scene, ctx, lineup, out):
         light.location = base + Vector(loc)
         scene.collection.objects.link(light)
         look_at(light, base + Vector((0, 0, 1.0)))
-    set_time_of_day(ctx, scene, 'interior')
+    set_time_of_day(ctx, scene, 'interior_candle')
     for label, loc, target, lens in (('zz_actors_lineup', (0, -7.5, 1.5), (0, 0, 1.0), 40),
                                      ('zz_props_lineup', (0, -3.6, 1.6), (0, -1.6, 0.95), 50)):
         cam = bpy.data.objects.new('LOOKDEV_' + label, bpy.data.cameras.new('LOOKDEV_' + label))
