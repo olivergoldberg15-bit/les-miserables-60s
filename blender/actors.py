@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import bpy
 from mathutils import Vector
-from lib import pbr_material, look_at
+from lib import look_at
 
 AVATARS = {name: name for name in
            ('valjean', 'bishop', 'gendarme_1', 'gendarme_2', 'gendarme_3')}
@@ -62,7 +62,7 @@ def _move(obj, collection):
 
 
 def _textures(objects, directory):
-    """Relink FBX image basenames against the separately downloaded textures."""
+    """Repair imported maps without making an absent texture fatal."""
     files = {p.name.lower(): p for p in Path(directory).rglob('*') if p.is_file()}
     for obj in objects:
         if obj.type != 'MESH':
@@ -76,211 +76,185 @@ def _textures(objects, directory):
                 name = node.image.filepath.replace('\\', '/').rsplit('/', 1)[-1].lower()
                 path = files.get(name)
                 if path:
-                    node.image.filepath = str(path)
-                    node.image.reload()
+                    try:
+                        node.image.filepath = str(path)
+                        node.image.reload()
+                    except Exception as exc:
+                        print(f'[actors] WARNING texture {name}: {exc}', flush=True)
                 elif not node.image.packed_file:
-                    raise RuntimeError(f'[actors] missing avatar texture: {name} in {directory}')
-
-
-def _cloth(ctx, name, color, key='cloth_wool', roughness=.92, metallic=0):
-    mat = pbr_material(ctx, key, scale=7, name='ACTOR_' + name)
-    nodes, links = mat.node_tree.nodes, mat.node_tree.links
-    shader = nodes.get('Principled BSDF')
-    incoming = next(iter(shader.inputs['Base Color'].links), None)
-    if incoming:
-        tint = nodes.new('ShaderNodeMixRGB')
-        tint.blend_type = 'MULTIPLY'
-        tint.inputs[0].default_value = 1
-        tint.inputs[2].default_value = (*color, 1)
-        links.new(incoming.from_socket, tint.inputs[1])
-        links.new(tint.outputs[0], shader.inputs['Base Color'])
-    for link in list(shader.inputs['Roughness'].links):
-        links.remove(link)
-    shader.inputs['Roughness'].default_value = roughness
-    shader.inputs['Metallic'].default_value = metallic
-    return mat
-
-
-def _mesh(actor, name, verts, faces, mat, weights):
-    mesh = bpy.data.meshes.new(actor.name + '_' + name)
-    mesh.from_pydata(verts, [], faces)
-    mesh.update()
-    obj = bpy.data.objects.new(mesh.name, mesh)
-    actor.collection.objects.link(obj)
-    obj.parent = actor.root
-    obj.data.materials.append(mat)
-    # Bone coordinates are transformed into actor metres, so deform modifier
-    # uses the same world-space bind transform as the imported skeleton.
-    groups = {}
-    for i, influences in enumerate(weights):
-        total = sum(influences.values())
-        for bone, weight in influences.items():
-            if bone not in groups:
-                groups[bone] = obj.vertex_groups.new(name=bone)
-            groups[bone].add([i], weight / total, 'REPLACE')
-    mod = obj.modifiers.new('Rocketbox wardrobe deformation', 'ARMATURE')
-    mod.object = actor.rig
-    for polygon in mesh.polygons:
-        polygon.use_smooth = True
-    actor.costume.append(obj)
-    return obj
-
-
-def _ring(actor, name, levels, mat, bone, segments=48):
-    """Elliptical tailored shell; radii and centres are in actor-local metres."""
-    verts = [(x + rx * math.cos(2 * math.pi * i / segments),
-              y + ry * math.sin(2 * math.pi * i / segments), z)
-             for x, y, z, rx, ry in levels for i in range(segments)]
-    faces = [(j * segments + i, j * segments + (i+1) % segments,
-              (j+1) * segments + (i+1) % segments, (j+1) * segments + i)
-             for j in range(len(levels)-1) for i in range(segments)]
-    obj = _mesh(actor, name, verts, faces, mat, [{bone.name: 1}] * len(verts))
-    solid = obj.modifiers.new('Wool thickness', 'SOLIDIFY')
-    solid.thickness = .006
-    return obj
-
-
-def _tube(actor, name, start, end, radius, mat, bone, end_radius=None):
-    start, end = Vector(start), Vector(end)
-    direction = (end-start).normalized()
-    side = direction.cross(Vector((0, 1, 0)))
-    if side.length < .01:
-        side = direction.cross(Vector((1, 0, 0)))
-    side.normalize()
-    other = direction.cross(side).normalized()
-    verts = []
-    for point, r in ((start, radius), (end, end_radius or radius)):
-        verts.extend(tuple(point + r * (side * math.cos(i*math.tau/20) +
-                                       other * math.sin(i*math.tau/20))) for i in range(20))
-    faces = [(i, (i+1) % 20, 20+(i+1) % 20, 20+i) for i in range(20)]
-    faces.extend([tuple(reversed(range(20))), tuple(range(20, 40))])
-    return _mesh(actor, name, verts, faces, mat, [{bone.name: 1}] * 40)
-
-
-def _box(actor, name, center, size, mat, bone):
-    verts = [(center[0]+x*size[0]/2, center[1]+y*size[1]/2, center[2]+z*size[2]/2)
-             for x, y, z in ((-1,-1,-1),(1,-1,-1),(1,1,-1),(-1,1,-1),
-                             (-1,-1,1),(1,-1,1),(1,1,1),(-1,1,1))]
-    return _mesh(actor, name, verts,
-                 [(0,3,2,1),(4,5,6,7),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)],
-                 mat, [{bone.name: 1}] * 8)
+                    print(f'[actors] WARNING missing avatar texture: {name}', flush=True)
+    return files
 
 
 def _point(actor, bone, tail=False):
     return actor.rig.matrix_local @ (bone.tail_local if tail else bone.head_local)
 
 
-def _retain_skin(actor):
-    """Delete original clothing geometry, including hidden body below the collar.
+def _material(name, color, roughness=.85, metallic=0):
+    material = bpy.data.materials.new(name)
+    material.use_nodes = True
+    shader = material.node_tree.nodes.get('Principled BSDF')
+    shader.inputs['Base Color'].default_value = (*color, 1)
+    shader.inputs['Roughness'].default_value = roughness
+    shader.inputs['Metallic'].default_value = metallic
+    return material
 
-    Preserve only head/neck and hands by dominant skinning group. This also
-    removes shoes, cuffs and military accessories rather than covering them.
-    """
-    import bmesh
-    allowed = {b.name for b in actor.rig.data.bones
-               if any(t in _bone_key(b.name) for t in ('head', 'neck', 'finger', 'thumb', 'hand'))}
+
+def _wardrobe(actor, files):
+    """Material-only treatment: never cut or replace the Rocketbox human."""
+    copies = {}
     for obj in actor.imported:
         if obj.type != 'MESH':
             continue
-        names = {g.index: g.name for g in obj.vertex_groups}
-        keep = set()
-        for v in obj.data.vertices:
-            if v.groups and names.get(max(v.groups, key=lambda g: g.weight).group) in allowed:
-                keep.add(v.index)
-        bm = bmesh.new()
-        bm.from_mesh(obj.data)
-        bm.verts.ensure_lookup_table()
-        bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.index not in keep], context='VERTS')
-        bm.to_mesh(obj.data)
-        bm.free()
+        for slot in obj.material_slots:
+            original = slot.material
+            if original is None:
+                continue
+            if original in copies:
+                slot.material = copies[original]
+                continue
+            material = original.copy()
+            copies[original] = material
+            slot.material = material
+            material.use_nodes = True
+            nodes, links = material.node_tree.nodes, material.node_tree.links
+            shader = next((n for n in nodes if n.type == 'BSDF_PRINCIPLED'), None)
+            if shader is None:
+                print(f'[actors] WARNING no Principled shader: {material.name}', flush=True)
+                continue
+            images = [n for n in nodes if n.type == 'TEX_IMAGE' and n.image]
+            identity = ' '.join([original.name] + [n.image.name + ' ' + n.image.filepath for n in images]).lower()
+            diffuse = next((n for n in images if any(t in (n.image.name + n.image.filepath).lower()
+                            for t in ('diffuse', 'albedo', 'basecolor', 'base_color'))), None)
+            incoming = next(iter(shader.inputs['Base Color'].links), None)
+            if diffuse is None and incoming and incoming.from_node.type == 'TEX_IMAGE':
+                diffuse = incoming.from_node
+            if diffuse and not incoming:
+                links.new(diffuse.outputs['Color'], shader.inputs['Base Color'])
+                incoming = next(iter(shader.inputs['Base Color'].links), None)
+            # Cards must cast their cutout silhouette, never an opaque eye band.
+            if any(t in identity for t in ('lash', 'brow', 'hair')):
+                opacity = next((n for n in images if 'opacity' in (n.image.name + n.image.filepath).lower()), None)
+                if opacity is None and diffuse:
+                    stem = re.sub(r'(?i)(diffuse|albedo|basecolor|base_color).*', '', Path(diffuse.image.name).stem)
+                    path = next((p for name, p in sorted(files.items())
+                                 if stem and name.startswith(stem.lower()) and 'opacity' in name), None)
+                    if path:
+                        try:
+                            opacity = nodes.new('ShaderNodeTexImage')
+                            opacity.image = bpy.data.images.load(str(path), check_existing=True)
+                            opacity.image.colorspace_settings.name = 'Non-Color'
+                            for uv_link in diffuse.inputs['Vector'].links:
+                                links.new(uv_link.from_socket, opacity.inputs['Vector'])
+                        except Exception as exc:
+                            print(f'[actors] WARNING opacity {path}: {exc}', flush=True)
+                            opacity = None
+                if opacity or diffuse:
+                    links.new(opacity.outputs['Color'] if opacity else diffuse.outputs['Alpha'], shader.inputs['Alpha'])
+                # Blender 4.2 replaces the legacy HASHED enum with DITHERED.
+                if hasattr(material, 'surface_render_method'):
+                    material.surface_render_method = 'DITHERED'
+                elif hasattr(material, 'blend_method'):
+                    material.blend_method = 'HASHED'
+                if hasattr(material, 'shadow_method'):
+                    material.shadow_method = 'HASHED'
+            if any(t in identity for t in ('eye', 'cornea')):
+                shader.inputs['Roughness'].default_value = .08 if 'cornea' in identity else .25
+                if 'cornea' in identity:
+                    transmission = shader.inputs.get('Transmission Weight') or shader.inputs.get('Transmission')
+                    if transmission:
+                        transmission.default_value = 1
+                    shader.inputs['IOR'].default_value = 1.376
+                    if not diffuse:
+                        shader.inputs['Base Color'].default_value = (1, 1, 1, 1)
+            if any(t in identity for t in ('skin', 'head', 'body', 'eye', 'cornea', 'hair', 'lash', 'brow', 'teeth', 'tooth')):
+                continue
+            lower = any(t in identity for t in ('trouser', 'pant', 'jeans', 'breech', 'leg'))
+            shoe = any(t in identity for t in ('shoe', 'boot', 'sole'))
+            color = ((.17, .105, .055) if actor.name == 'valjean' else
+                     (.012, .013, .017) if actor.name == 'bishop' else (.018, .035, .085))
+            if lower and actor.name != 'bishop':
+                color = (.035, .029, .024) if actor.name == 'valjean' else (.75, .72, .65)
+            if shoe:
+                color = (.025, .018, .014)
+            # Original luminance preserves modeled/painted folds and seams;
+            # imported normal/bump connections remain completely untouched.
+            tint = nodes.new('ShaderNodeMixRGB')
+            tint.name = 'Period wool colour'
+            tint.blend_type = 'MULTIPLY'
+            tint.inputs[0].default_value = 1
+            tint.inputs[2].default_value = (*color, 1)
+            if incoming:
+                luminance = nodes.new('ShaderNodeRGBToBW')
+                links.new(incoming.from_socket, luminance.inputs[0])
+                links.new(luminance.outputs[0], tint.inputs[1])
+            else:
+                base = shader.inputs['Base Color'].default_value
+                value = .2126*base[0] + .7152*base[1] + .0722*base[2]
+                tint.inputs[1].default_value = (value, value, value, 1)
+            links.new(tint.outputs[0], shader.inputs['Base Color'])
+            for link in list(shader.inputs['Roughness'].links):
+                links.remove(link)
+            shader.inputs['Roughness'].default_value = .7 if shoe else .85
 
 
-def _wardrobe(actor, ctx):
-    rig = actor.rig
-    hips = _bone(rig, 'hips', 'pelvis', 'bip01')
-    chest = _bone(rig, 'spine2', 'spine1', 'spine')
-    head = _bone(rig, 'head')
-    neck = _bone(rig, 'neck')
-    p = _point(actor, hips)
-    n = _point(actor, neck)
-    h = _point(actor, head)
-    heavy = actor.name == 'valjean'
-    bishop = actor.name == 'bishop'
-    width = .29 if heavy else .245
-    wool = _cloth(ctx, actor.name + '_wool',
-                  (.12,.085,.05) if heavy else ((.012,.012,.016) if bishop else (.018,.035,.085)),
-                  key='cassock_black' if bishop else 'cloth_wool')
-    leather = _cloth(ctx, actor.name + '_leather', (.045,.025,.015), roughness=.7)
-    white = _cloth(ctx, actor.name + '_linen', (.72,.68,.56))
-    iron = _cloth(ctx, actor.name + '_iron', (.12,.13,.14), roughness=.55, metallic=.85)
-    # Long coat skirt follows pelvis, torso follows spine. Overlap hides join.
-    _ring(actor, 'coat_skirt', [(p.x,p.y,.16 if bishop else .49,width*1.42,.24),
-                              (p.x,p.y,p.z-.03,width,.18),
-                              (p.x,p.y,p.z+.14,width,.19)], wool, hips)
-    _ring(actor, 'coat_bodice', [(p.x,p.y,p.z-.06,width,.19),
-                               (n.x,n.y,n.z-.12,width*1.1,.20),
-                               (n.x,n.y,n.z+.015,.115,.115)], wool, chest)
-    _ring(actor, 'collar', [(n.x,n.y,n.z-.02,.12,.12),
-                          (n.x,n.y,n.z+.055,.11,.11)], white if bishop else wool, neck)
-    for side in ('left', 'right'):
-        upper = _bone(rig, side+'arm', side+'upperarm')
-        fore = _bone(rig, side+'forearm', side+'lowerarm')
-        hand = _bone(rig, side+'hand')
-        _tube(actor, side+'_sleeve_upper', _point(actor,upper), _point(actor,fore),
-              .115 if heavy else .10, wool, upper)
-        _tube(actor, side+'_sleeve_cuff', _point(actor,fore), _point(actor,hand),
-              .092, wool, fore, .073)
-        leg = _bone(rig, side+'upleg', side+'thigh')
-        shin = _bone(rig, side+'leg', side+'calf')
-        foot = _bone(rig, side+'foot')
-        _tube(actor, side+'_breeches', _point(actor,leg), _point(actor,shin), .12, wool, leg)
-        _tube(actor, side+'_boot', _point(actor,shin), _point(actor,foot), .085, leather, shin)
-        fp = _point(actor,foot)
-        _box(actor, side+'_boot_toe', (fp.x,fp.y-.075,.065), (.16,.29,.13), leather, foot)
-    if heavy:
-        _ring(actor, 'shoulder_cape', [(n.x,n.y,n.z-.40,.41,.28),
-                                     (n.x,n.y,n.z-.13,.36,.25),
-                                     (n.x,n.y,n.z+.015,.12,.12)], wool, chest)
-        _ring(actor, 'hat_brim', [(h.x,h.y,h.z+.17,.39,.34),
-                                (h.x,h.y,h.z+.185,.39,.34)], leather, head)
-        _ring(actor, 'hat_crown', [(h.x,h.y,h.z+.18,.17,.155),
-                                 (h.x,h.y,h.z+.34,.15,.14),
-                                 (h.x,h.y,h.z+.35,.001,.001)], wool, head)
-        _box(actor, 'knapsack', (p.x,p.y+.30,p.z+.23), (.40,.20,.48), leather, chest)
-        for x in (-.15,.15):
-            _tube(actor, 'knapsack_strap', (p.x+x,p.y-.205,p.z),
-                  (n.x+x,n.y-.21,n.z-.14), .022, leather, chest)
-        hand = _bone(rig, 'righthand')
-        hp = _point(actor,hand)
-        _tube(actor, 'walking_stick', hp+Vector((0,0,-.85)), hp+Vector((0,0,.25)), .022, leather, hand)
-        _tube(actor, 'iron_ferrule', hp+Vector((0,0,-.88)), hp+Vector((0,0,-.77)), .026, iron, hand)
-    elif bishop:
-        # White side/back hair, open face and receding crown.
-        hair = _cloth(ctx, 'bishop_white_hair', (.82,.80,.74))
-        verts, faces = [], []
-        for z, radius in ((h.z-.015,.145),(h.z+.12,.16),(h.z+.24,.10)):
-            for i in range(25):
-                angle = -.1 + i*(math.pi+.2)/24
-                verts.append((h.x+radius*math.cos(angle),h.y+radius*math.sin(angle),z))
-        for j in range(2):
-            faces.extend((j*25+i,j*25+i+1,(j+1)*25+i+1,(j+1)*25+i) for i in range(24))
-        _mesh(actor, 'white_hair', verts, faces, hair, [{head.name:1}]*len(verts))
-    else:
-        for sign in (-1,1):
-            # Flat leather crossbelts across chest rather than round ropes.
-            a = (p.x-sign*.18,p.y-.215,p.z+.01)
-            b = (n.x+sign*.18,n.y-.225,n.z-.15)
-            verts = [(a[0]-.025,a[1],a[2]),(a[0]+.025,a[1],a[2]),
-                     (b[0]+.025,b[1],b[2]),(b[0]-.025,b[1],b[2])]
-            _mesh(actor, 'crossbelt', verts, [(0,1,2,3)], white, [{chest.name:1}]*4)
-        _ring(actor, 'bicorne_crown', [(h.x,h.y,h.z+.16,.16,.14),
-                                     (h.x,h.y,h.z+.32,.09,.08),
-                                     (h.x,h.y,h.z+.34,.001,.001)], wool, head)
-        # Two upturned broad leaves, points worn across the shoulders.
-        for sign in (-1,1):
-            verts = [(h.x-.35,h.y,h.z+.18),(h.x+.35,h.y,h.z+.18),
-                     (h.x+.19,h.y+sign*.10,h.z+.37),(h.x-.19,h.y+sign*.10,h.z+.37)]
-            _mesh(actor, 'bicorne_leaf', verts, [(0,1,2,3)], wool, [{head.name:1}]*4)
+def _accessory(actor, name, vertices, faces, material, bone):
+    mesh = bpy.data.meshes.new(actor.name + '_' + name)
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+    obj = bpy.data.objects.new(mesh.name, mesh)
+    actor.collection.objects.link(obj)
+    obj.parent = actor.root
+    obj.data.materials.append(material)
+    for polygon in mesh.polygons:
+        polygon.use_smooth = True
+    group = obj.vertex_groups.new(name=bone.name)
+    group.add(list(range(len(vertices))), 1, 'REPLACE')
+    actor.costume.append(obj)
+    return obj
+
+
+def _extras(actor):
+    if actor.name != 'valjean':
+        return
+    chest = _bone(actor.rig, 'spine2', 'spine1', 'spine')
+    center = _point(actor, chest) + Vector((0, .25, -.12))
+    corners = [(-1,-1,-1),(1,-1,-1),(1,1,-1),(-1,1,-1),
+               (-1,-1,1),(1,-1,1),(1,1,1),(-1,1,1)]
+    bag = _accessory(actor, 'soft_knapsack',
+        [tuple(center + Vector((x*.23,y*.15,z*.29))) for x,y,z in corners],
+        [(0,3,2,1),(4,5,6,7),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)],
+        _material('Valjean_canvas', (.095,.065,.035)), chest)
+    sub = bag.modifiers.new('Soft cloth volume', 'SUBSURF')
+    sub.levels = sub.render_levels = 2
+    displacement = bag.modifiers.new('Canvas irregularity', 'DISPLACE')
+    noise = bpy.data.textures.new('Knapsack deterministic clouds', type='CLOUDS')
+    noise.noise_scale = .09
+    displacement.texture = noise
+    displacement.strength = .01
+    displacement.texture_coords = 'LOCAL'
+    deform = bag.modifiers.new('Rocketbox attachment', 'ARMATURE')
+    deform.object = actor.rig
+    hand = _bone(actor.rig, 'righthand')
+    hp = _point(actor, hand)
+    for name, bottom, top, radius, material in (
+        ('walking_stick', -.85, .25, .022, _material('Stick wood', (.045,.025,.015), .7)),
+        ('iron_ferrule', -.88, -.77, .026, _material('Stick iron', (.12,.13,.14), .55, .85))):
+        count = 24
+        vertices = [tuple(hp + Vector((radius*math.cos(i*math.tau/count),
+                    radius*math.sin(i*math.tau/count), z)))
+                    for z in (bottom, top) for i in range(count)]
+        faces = [(i,(i+1)%count,count+(i+1)%count,count+i) for i in range(count)]
+        faces += [tuple(reversed(range(count))), tuple(range(count,2*count))]
+        stick = _accessory(actor, name, vertices, faces, material, hand)
+        # Bone parent keeps the rigid prop attached through every hand pose.
+        bpy.context.view_layer.update()
+        world = stick.matrix_world.copy()
+        stick.parent = actor.rig
+        stick.parent_type = 'BONE'
+        stick.parent_bone = hand.name
+        bpy.context.view_layer.update()
+        stick.matrix_world = world
 
 
 def _resolve(actor):
@@ -573,13 +547,14 @@ def build(ctx):
         bpy.context.view_layer.update()
         actor = SimpleNamespace(name=name, root=root, rig=rig, collection=collection,
                                 imported=objects, costume=[], flag=None)
-        _textures(objects, asset['textures'])
-        _retain_skin(actor)
-        _wardrobe(actor, ctx)
+        files = _textures(objects, asset['textures'])
+        _wardrobe(actor, files)
+        _extras(actor)
         # Flag hidden until a shot supplies its motivated key light.
-        black = _cloth(ctx, name+'_negative_fill', (.002,.002,.002))
-        flag = _box(actor, 'face_flag', (0,0,0), (.42,.48,.012), black, _bone(rig,'head'))
-        flag.modifiers.clear()
+        black = _material(name+'_negative_fill', (.002,.002,.002))
+        flag = _accessory(actor, 'face_flag',
+                          [(-.21,-.24,0),(.21,-.24,0),(.21,.24,0),(-.21,.24,0)],
+                          [(0,1,2,3)], black, _bone(rig,'head'))
         flag.vertex_groups.clear()
         flag.visible_camera = False
         flag.visible_glossy = False
