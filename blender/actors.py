@@ -355,6 +355,14 @@ def _load_action(actor, clip):
             return Quaternion()
         first, last = (int(v) for v in action.frame_range)
         frames = list(range(first, last + 1))
+        # Clips bake their own root yaw; turn the whole clip about world Z so its
+        # first-frame root faces the way the avatar's rest root faces. Shots aim actors.
+        src_root = back[root_t]
+        start = obj_s @ rest_s[src_root] @ basis_s(src_root, first)
+        rest_root = obj_t @ rest_t[root_t]
+        axis = min((Vector(a) for a in ((1, 0, 0), (0, 1, 0), (0, 0, 1))), key=lambda a: abs((rest_root @ a).z))
+        want, have = rest_root @ axis, start @ axis
+        yaw = Quaternion((0, 0, 1), math.atan2(want.y, want.x) - math.atan2(have.y, have.x))
         keys = {b.name: [] for b in tgt_bones if b.name in back}
         bob = []
         for frame in frames:
@@ -370,7 +378,7 @@ def _load_action(actor, clip):
                 rel = rest_t[b.name] if b.parent is None else (
                     pose_t[b.parent.name] @ rest_t[b.parent.name].inverted() @ rest_t[b.name])
                 if b.name in back:
-                    pose_t[b.name] = obj_t.inverted() @ obj_s @ pose_s[back[b.name]]
+                    pose_t[b.name] = obj_t.inverted() @ yaw @ obj_s @ pose_s[back[b.name]]
                     q = rel.inverted() @ pose_t[b.name]
                     q.normalize()
                     if keys[b.name] and keys[b.name][-1].dot(q) < 0:
@@ -379,7 +387,6 @@ def _load_action(actor, clip):
                 else:
                     pose_t[b.name] = rel
             # In-place vertical bob of the root in world space, scaled to the target.
-            src_root = back.get(root_t)
             loc = curves.get(src_root, {}).get('location', {})
             v = Vector([loc[i].evaluate(frame) if i in loc else 0 for i in range(3)])
             world = obj_s @ rest_s[src_root] @ v * scale_s if src_root else Vector()
@@ -503,7 +510,8 @@ def pose(actor, name, frame_start, frame_end):
             angles.update(hips=(math.pi/2, 0, 0),
                           leftarm=(0, -1.05, -.35), rightarm=(0, 1.05, .35),
                           leftforearm=(-1.35, 0, 0), rightforearm=(-1.35, 0, 0))
-            offset.z = .72
+            # Lower the pelvis from standing height (~1 m) onto a mattress top (~.75 m).
+            offset.z = -.22
         elif name == 'held':
             angles.update(chest=(.28, 0, 0), head=(.25, 0, 0),
                           leftarm=(-.5, -1.1, 0), rightarm=(-.5, 1.1, 0),
