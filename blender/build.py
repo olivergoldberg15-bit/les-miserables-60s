@@ -38,7 +38,9 @@ def build_modules(ctx):
             continue
         try:
             module.build(ctx)
-            setattr(ctx, name, module)
+            # Keep whatever build(ctx) published (e.g. ctx.props = name -> object).
+            if getattr(ctx, name, None) is None:
+                setattr(ctx, name, module)
         except Exception as exc:
             raise RuntimeError(f'[build:{name}] {exc}') from exc
 
