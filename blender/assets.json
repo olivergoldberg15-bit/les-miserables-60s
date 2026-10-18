@@ -64,18 +64,18 @@
       "url": "https://polyhaven.com/a/forest_floor"
     },
     "cloth_wool": {
-      "id": "fabric_pattern_07",
+      "id": "caban",
       "type": "textures",
       "res": "2k",
       "license": "CC0",
-      "url": "https://polyhaven.com/a/fabric_pattern_07"
+      "url": "https://polyhaven.com/a/caban"
     },
     "cassock_black": {
-      "id": "fabric_pattern_07",
+      "id": "poly_wool_herringbone",
       "type": "textures",
       "res": "2k",
       "license": "CC0",
-      "url": "https://polyhaven.com/a/fabric_pattern_07"
+      "url": "https://polyhaven.com/a/poly_wool_herringbone"
     }
   },
   "hdris": {
