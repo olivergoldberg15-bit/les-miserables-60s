@@ -124,12 +124,15 @@ class Assets:
                                   and any(ext in trail for ext in extensions)]
                     if not candidates:
                         return None
-                    trail, item = sorted(candidates, key=lambda x: '/'.join(x[0]))[0]
+                    # Prefer the caller's extension order (jpg/png before exr), then a stable path order.
+                    rank = lambda trail: next((i for i, ext in enumerate(extensions) if ext in trail), len(extensions))
+                    trail, item = sorted(candidates, key=lambda x: (rank(x[0]), '/'.join(x[0])))[0]
                     return self.fetch(item['url'], f'{group}/{asset_id}')
                 if group == 'textures':
-                    maps = {name: pick(channel, ('png', 'jpg', 'exr')) for name, channel in
-                            [('albedo', 'diff'), ('normal', 'nor_gl'), ('roughness', 'rough'),
-                             ('displacement', 'disp'), ('ao', 'ao')]}
+                    # Poly Haven's /files keys are exactly Diffuse, nor_gl, Rough, Displacement, AO.
+                    maps = {name: pick(channel, ('jpg', 'png', 'exr')) for name, channel in
+                            [('albedo', 'Diffuse'), ('normal', 'nor_gl'), ('roughness', 'Rough'),
+                             ('displacement', 'Displacement'), ('ao', 'AO')]}
                     for required in ('albedo', 'normal', 'roughness'):
                         if not maps[required]:
                             raise ValueError(f'[assets] {asset_id} lacks {required} at {spec["res"]}')

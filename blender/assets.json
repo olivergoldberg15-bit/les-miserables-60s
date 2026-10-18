@@ -8,11 +8,11 @@
       "url": "https://polyhaven.com/a/plastered_wall_02"
     },
     "limestone_wall": {
-      "id": "castle_brick_02",
+      "id": "castle_wall_varriation",
       "type": "textures",
       "res": "2k",
       "license": "CC0",
-      "url": "https://polyhaven.com/a/castle_brick_02"
+      "url": "https://polyhaven.com/a/castle_wall_varriation"
     },
     "rubble_stone": {
       "id": "rocks_ground_02",
@@ -29,11 +29,11 @@
       "url": "https://polyhaven.com/a/cobblestone_floor_02"
     },
     "roof_tiles": {
-      "id": "roof_tiles_02",
+      "id": "clay_roof_tiles_02",
       "type": "textures",
       "res": "2k",
       "license": "CC0",
-      "url": "https://polyhaven.com/a/roof_tiles_02"
+      "url": "https://polyhaven.com/a/clay_roof_tiles_02"
     },
     "wood_planks": {
       "id": "wood_planks_grey",
@@ -50,11 +50,11 @@
       "url": "https://polyhaven.com/a/aerial_ground_rock"
     },
     "dry_grass": {
-      "id": "dry_grass",
+      "id": "sparse_grass",
       "type": "textures",
       "res": "2k",
       "license": "CC0",
-      "url": "https://polyhaven.com/a/dry_grass"
+      "url": "https://polyhaven.com/a/sparse_grass"
     },
     "forest_floor": {
       "id": "forest_floor",
@@ -80,18 +80,18 @@
   },
   "hdris": {
     "dusk": {
-      "id": "kiara_1_sunset",
+      "id": "aarfontein_dusk",
       "type": "hdris",
       "res": "2k",
       "license": "CC0",
-      "url": "https://polyhaven.com/a/kiara_1_sunset"
+      "url": "https://polyhaven.com/a/aarfontein_dusk"
     },
     "night": {
-      "id": "moonless_golf",
+      "id": "kloppenheim_02",
       "type": "hdris",
       "res": "2k",
       "license": "CC0",
-      "url": "https://polyhaven.com/a/moonless_golf"
+      "url": "https://polyhaven.com/a/kloppenheim_02"
     },
     "dawn": {
       "id": "kiara_1_dawn",
@@ -120,66 +120,89 @@
     "lantern": null
   },
   "avatars": {
-    "Adults_Male_01": {
-      "path": "Assets/Avatars/Adults/Adults_Male_01",
+    "Male_Adult_04": {
+      "path": "Assets/Avatars/Adults/Male_Adult_04",
       "license": "MIT"
     },
-    "Adults_Male_02": {
-      "path": "Assets/Avatars/Adults/Adults_Male_02",
+    "Male_Adult_08": {
+      "path": "Assets/Avatars/Adults/Male_Adult_08",
+      "license": "MIT"
+    },
+    "Male_Adult_13": {
+      "path": "Assets/Avatars/Adults/Male_Adult_13",
+      "license": "MIT"
+    },
+    "Male_Adult_17": {
+      "path": "Assets/Avatars/Adults/Male_Adult_17",
       "license": "MIT"
     },
     "Military_Male_01": {
-      "path": "Assets/Avatars/Military/Military_Male_01",
+      "path": "Assets/Avatars/Professions/Military_Male_01",
       "license": "MIT"
     },
     "Military_Male_02": {
-      "path": "Assets/Avatars/Military/Military_Male_02",
+      "path": "Assets/Avatars/Professions/Military_Male_02",
       "license": "MIT"
     },
     "Military_Male_03": {
-      "path": "Assets/Avatars/Military/Military_Male_03",
+      "path": "Assets/Avatars/Professions/Military_Male_03",
       "license": "MIT"
     }
   },
   "avatar_aliases": {
-    "valjean": "Adults_Male_01",
-    "bishop": "Adults_Male_02",
+    "valjean": "Male_Adult_08",
+    "bishop": "Male_Adult_17",
     "gendarme_1": "Military_Male_01",
     "gendarme_2": "Military_Male_02",
     "gendarme_3": "Military_Male_03"
   },
   "clips": {
     "walk": [
-      "m_walk.fbx",
-      "m_walking.fbx"
+      "m_walk_neutral_01.max.fbx",
+      "m_walk_neutral.max.fbx"
+    ],
+    "walk_weary": [
+      "m_walk_bruised.max.fbx",
+      "m_walk_slow_01.max.fbx"
     ],
     "idle": [
-      "m_idle.fbx",
-      "m_standing_idle.fbx"
+      "m_idle_breathe_01.max.fbx",
+      "m_idle_neutral_01.max.fbx"
+    ],
+    "idle_nervous": [
+      "m_idle_nervous_01.max.fbx"
+    ],
+    "look_around": [
+      "m_idle_look_around_01.max.fbx"
     ],
     "knock": [
-      "m_knock.fbx",
-      "m_knocking.fbx"
+      "m_knock_door.max.fbx"
     ],
-    "sit": [
-      "m_sit.fbx",
-      "m_sitting.fbx"
+    "try_door": [
+      "m_try_door_inwards.max.fbx"
     ],
-    "eat": [
-      "m_eat.fbx",
-      "m_eating.fbx"
+    "sit_down_table": [
+      "m_sit_down_table_left.max.fbx",
+      "m_sit_down_chair_01.max.fbx"
     ],
-    "sleep": [
-      "m_sleep.fbx",
-      "m_sleeping.fbx"
+    "sit_table_idle": [
+      "m_sit_table_idle_neutral_01.max.fbx",
+      "m_sit_table_breathe_01.max.fbx"
     ],
-    "crouch": [
-      "m_crouch.fbx",
-      "m_crouching.fbx"
+    "sit_chair_idle": [
+      "m_sit_chair_idle_neutral_01.max.fbx"
     ],
-    "carry": [
-      "m_carry.fbx",
-      "m_carrying.fbx"
+    "crouch_in": [
+      "m_crouch_in.max.fbx"
+    ],
+    "crouch_idle": [
+      "m_crouch_idle.max.fbx"
+    ],
+    "talk": [
+      "m_gestic_talk_neutral_01.max.fbx"
+    ],
+    "angry": [
+      "m_idle_angry_01.max.fbx"
     ]
   },
   "fonts": {
@@ -199,7 +222,8 @@
   "notes": [
     "Null model keys explicitly use procedural fallback; discovery in assets.py may resolve catalog models.",
     "Avatar appearance must be reviewed in cloud lookdev; body weight and apparent age are not API metadata.",
-    "EB Garamond uses upstream variable TTFs; regular and semibold share a font file."
+    "EB Garamond uses upstream variable TTFs; regular and semibold share a font file.",
+    "Rocketbox has no lying/sleeping/carrying clips: actors.py hand-poses sleep, vault, held. Avatar and clip names verified against the repo tree on 2026-10-18."
   ],
   "model_search": {
     "table": [
