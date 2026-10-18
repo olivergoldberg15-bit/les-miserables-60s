@@ -90,6 +90,16 @@ def _point(actor, bone, tail=False):
     return actor.rig.matrix_local @ (bone.tail_local if tail else bone.head_local)
 
 
+def _canvas():
+    """Worn wool canvas for the knapsack, texture-driven like the rest of the film."""
+    from lib import pbr_material
+    try:
+        return pbr_material(_CTX, 'cassock_black', scale=2.0, name='Valjean_canvas')
+    except Exception as exc:
+        print(f'[actors] WARNING canvas texture: {exc}', flush=True)
+        return _material('Valjean_canvas', (.095, .065, .035))
+
+
 def _material(name, color, roughness=.85, metallic=0):
     material = bpy.data.materials.new(name)
     material.use_nodes = True
@@ -254,7 +264,7 @@ def _extras(actor):
     bag = _accessory(actor, 'soft_knapsack',
         [tuple(center + Vector((x*.19,y*.09,z*.24))) for x,y,z in corners],
         [(0,3,2,1),(4,5,6,7),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)],
-        _material('Valjean_canvas', (.095,.065,.035)), chest)
+        _canvas(), chest)
     # A rounded box reads as a canvas pack; plain subdivision of a cube reads as an egg.
     bevel = bag.modifiers.new('Soft canvas edges', 'BEVEL')
     bevel.width, bevel.segments, bevel.limit_method = .045, 4, 'NONE'
@@ -510,8 +520,8 @@ def pose(actor, name, frame_start, frame_end):
             angles.update(hips=(math.pi/2, 0, 0),
                           leftarm=(0, -1.05, -.35), rightarm=(0, 1.05, .35),
                           leftforearm=(-1.35, 0, 0), rightforearm=(-1.35, 0, 0))
-            # Lower the pelvis from standing height (~1 m) onto a mattress top (~.75 m).
-            offset.z = -.22
+            # Pelvis about .95 m up: lying on a mattress top of ~.8 m (body ~.15 m thick).
+            offset.z = -.05
         elif name == 'held':
             angles.update(chest=(.28, 0, 0), head=(.25, 0, 0),
                           leftarm=(-.5, -1.1, 0), rightarm=(-.5, 1.1, 0),
