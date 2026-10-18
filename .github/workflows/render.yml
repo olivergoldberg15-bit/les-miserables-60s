@@ -1,0 +1,142 @@
+name: Blender cloud film
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Render mode
+        type: choice
+        options: [lookdev, stills, full]
+        default: lookdev
+        required: true
+      frames:
+        description: Comma separated frames (stills only)
+        type: string
+        default: '1,240,480,720,960,1200'
+      chunks:
+        description: Full render chunks (1 to 20)
+        type: number
+        default: 20
+        required: true
+permissions:
+  contents: read
+env:
+  BLENDER_VERSION: 4.2.0
+  BLENDER_ARCHIVE: blender-4.2.0-linux-x64.tar.xz
+  ASSET_DIR: ${{ github.workspace }}/build/assets
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate inputs and plan chunks
+        id: matrix
+        env:
+          MODE: ${{ inputs.mode }}
+          CHUNKS: ${{ inputs.chunks }}
+        run: |
+          python - <<'PY'
+          import json, os
+          count = int(os.environ['CHUNKS'])
+          if not 1 <= count <= 20:
+              raise SystemExit('[build] chunks must be between 1 and 20')
+          if os.environ['MODE'] not in ('lookdev', 'stills', 'full'):
+              raise SystemExit('[build] invalid mode')
+          matrix = {'chunk': list(range(count if os.environ['MODE'] == 'full' else 1))}
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print('matrix=' + json.dumps(matrix), file=output)
+          PY
+      - uses: actions/cache@v4
+        id: blender-cache
+        with:
+          path: .cache/blender
+          key: blender-linux-x64-${{ env.BLENDER_VERSION }}
+      - name: Install pinned Blender
+        if: steps.blender-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .cache/blender
+          cd .cache/blender
+          curl --fail --location --retry 3 -O "https://download.blender.org/release/Blender4.2/$BLENDER_ARCHIVE"
+          curl --fail --location --retry 3 -o checksums.txt "https://download.blender.org/release/Blender4.2/blender-$BLENDER_VERSION.sha256"
+          grep " $BLENDER_ARCHIVE$" checksums.txt | sha256sum --check --strict
+          tar -xf "$BLENDER_ARCHIVE" --strip-components=1
+          rm "$BLENDER_ARCHIVE"
+      - uses: actions/cache@v4
+        with:
+          path: build/assets
+          key: assets-blender-${{ env.BLENDER_VERSION }}-${{ hashFiles('blender/assets.json', 'blender/assets.py') }}
+      - name: Download assets and build scene
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          .cache/blender/blender --version
+          .cache/blender/blender -b --factory-startup --python-exit-code 1 -P blender/build.py -- --mode "$MODE" --prepare-assets --out build/lesmis.blend
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scene
+          path: |
+            build/lesmis.blend
+            build/assets
+          if-no-files-found: error
+          retention-days: 7
+  render:
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache/restore@v4
+        with:
+          path: .cache/blender
+          key: blender-linux-x64-${{ env.BLENDER_VERSION }}
+          fail-on-cache-miss: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: scene
+          path: build
+      - name: Render chunk
+        env:
+          MODE: ${{ inputs.mode }}
+          FRAMES: ${{ inputs.frames }}
+          CHUNK: ${{ matrix.chunk }}
+          CHUNKS: ${{ inputs.chunks }}
+        run: |
+          .cache/blender/blender -b build/lesmis.blend --python-exit-code 1 -P blender/render.py -- --mode "$MODE" --frames "$FRAMES" --chunk "$CHUNK" --chunks "$CHUNKS" --out build/frames
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frames-${{ matrix.chunk }}
+          path: build/frames/*.png
+          if-no-files-found: error
+          retention-days: 7
+  assemble:
+    if: inputs.mode == 'full'
+    needs: render
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: frames-*
+          merge-multiple: true
+          path: build/frames
+      - uses: actions/download-artifact@v4
+        with:
+          name: scene
+          path: build
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Assemble film
+        run: bash post/assemble.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lesmis-film
+          path: build/lesmis.mp4
+          if-no-files-found: error
+          retention-days: 14

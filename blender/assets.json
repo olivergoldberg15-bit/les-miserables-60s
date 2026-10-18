@@ -1,0 +1,238 @@
+{
+  "textures": {
+    "plaster": {
+      "id": "plastered_wall_02",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/plastered_wall_02"
+    },
+    "limestone_wall": {
+      "id": "castle_brick_02",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/castle_brick_02"
+    },
+    "rubble_stone": {
+      "id": "rocks_ground_02",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/rocks_ground_02"
+    },
+    "cobblestone": {
+      "id": "cobblestone_floor_02",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/cobblestone_floor_02"
+    },
+    "roof_tiles": {
+      "id": "roof_tiles_02",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/roof_tiles_02"
+    },
+    "wood_planks": {
+      "id": "wood_planks_grey",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/wood_planks_grey"
+    },
+    "dirt_road": {
+      "id": "aerial_ground_rock",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/aerial_ground_rock"
+    },
+    "dry_grass": {
+      "id": "dry_grass",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/dry_grass"
+    },
+    "forest_floor": {
+      "id": "forest_floor",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/forest_floor"
+    },
+    "cloth_wool": {
+      "id": "fabric_pattern_07",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/fabric_pattern_07"
+    },
+    "cassock_black": {
+      "id": "fabric_pattern_07",
+      "type": "textures",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/fabric_pattern_07"
+    }
+  },
+  "hdris": {
+    "dusk": {
+      "id": "kiara_1_sunset",
+      "type": "hdris",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/kiara_1_sunset"
+    },
+    "night": {
+      "id": "moonless_golf",
+      "type": "hdris",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/moonless_golf"
+    },
+    "dawn": {
+      "id": "kiara_1_dawn",
+      "type": "hdris",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/kiara_1_dawn"
+    },
+    "interior": {
+      "id": "studio_small_09",
+      "type": "hdris",
+      "res": "2k",
+      "license": "CC0",
+      "url": "https://polyhaven.com/a/studio_small_09"
+    }
+  },
+  "models": {
+    "table": null,
+    "chair": null,
+    "stool": null,
+    "barrel": null,
+    "crate": null,
+    "rock_large": null,
+    "shrub": null,
+    "candle_holder": null,
+    "lantern": null
+  },
+  "avatars": {
+    "Adults_Male_01": {
+      "path": "Assets/Avatars/Adults/Adults_Male_01",
+      "license": "MIT"
+    },
+    "Adults_Male_02": {
+      "path": "Assets/Avatars/Adults/Adults_Male_02",
+      "license": "MIT"
+    },
+    "Military_Male_01": {
+      "path": "Assets/Avatars/Military/Military_Male_01",
+      "license": "MIT"
+    },
+    "Military_Male_02": {
+      "path": "Assets/Avatars/Military/Military_Male_02",
+      "license": "MIT"
+    },
+    "Military_Male_03": {
+      "path": "Assets/Avatars/Military/Military_Male_03",
+      "license": "MIT"
+    }
+  },
+  "avatar_aliases": {
+    "valjean": "Adults_Male_01",
+    "bishop": "Adults_Male_02",
+    "gendarme_1": "Military_Male_01",
+    "gendarme_2": "Military_Male_02",
+    "gendarme_3": "Military_Male_03"
+  },
+  "clips": {
+    "walk": [
+      "m_walk.fbx",
+      "m_walking.fbx"
+    ],
+    "idle": [
+      "m_idle.fbx",
+      "m_standing_idle.fbx"
+    ],
+    "knock": [
+      "m_knock.fbx",
+      "m_knocking.fbx"
+    ],
+    "sit": [
+      "m_sit.fbx",
+      "m_sitting.fbx"
+    ],
+    "eat": [
+      "m_eat.fbx",
+      "m_eating.fbx"
+    ],
+    "sleep": [
+      "m_sleep.fbx",
+      "m_sleeping.fbx"
+    ],
+    "crouch": [
+      "m_crouch.fbx",
+      "m_crouching.fbx"
+    ],
+    "carry": [
+      "m_carry.fbx",
+      "m_carrying.fbx"
+    ]
+  },
+  "fonts": {
+    "garamond_regular": {
+      "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond[wght].ttf",
+      "license": "OFL-1.1"
+    },
+    "garamond_italic": {
+      "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Italic[wght].ttf",
+      "license": "OFL-1.1"
+    },
+    "garamond_semibold": {
+      "url": "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond[wght].ttf",
+      "license": "OFL-1.1"
+    }
+  },
+  "notes": [
+    "Null model keys explicitly use procedural fallback; discovery in assets.py may resolve catalog models.",
+    "Avatar appearance must be reviewed in cloud lookdev; body weight and apparent age are not API metadata.",
+    "EB Garamond uses upstream variable TTFs; regular and semibold share a font file."
+  ],
+  "model_search": {
+    "table": [
+      "wooden table",
+      "wooden_table"
+    ],
+    "chair": [
+      "wooden chair",
+      "wooden_chair"
+    ],
+    "stool": [
+      "stool"
+    ],
+    "barrel": [
+      "barrel"
+    ],
+    "crate": [
+      "wooden crate",
+      "wooden_crate"
+    ],
+    "rock_large": [
+      "rock"
+    ],
+    "shrub": [
+      "shrub",
+      "bush"
+    ],
+    "candle_holder": [
+      "candle holder",
+      "candle_holder"
+    ],
+    "lantern": [
+      "lantern"
+    ]
+  }
+}
