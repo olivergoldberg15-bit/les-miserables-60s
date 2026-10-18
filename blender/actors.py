@@ -252,11 +252,14 @@ def _extras(actor):
     corners = [(-1,-1,-1),(1,-1,-1),(1,1,-1),(-1,1,-1),
                (-1,-1,1),(1,-1,1),(1,1,1),(-1,1,1)]
     bag = _accessory(actor, 'soft_knapsack',
-        [tuple(center + Vector((x*.23,y*.15,z*.29))) for x,y,z in corners],
+        [tuple(center + Vector((x*.19,y*.09,z*.24))) for x,y,z in corners],
         [(0,3,2,1),(4,5,6,7),(0,1,5,4),(1,2,6,5),(2,3,7,6),(3,0,4,7)],
         _material('Valjean_canvas', (.095,.065,.035)), chest)
-    sub = bag.modifiers.new('Soft cloth volume', 'SUBSURF')
-    sub.levels = sub.render_levels = 2
+    # A rounded box reads as a canvas pack; plain subdivision of a cube reads as an egg.
+    bevel = bag.modifiers.new('Soft canvas edges', 'BEVEL')
+    bevel.width, bevel.segments, bevel.limit_method = .045, 4, 'NONE'
+    sub = bag.modifiers.new('Canvas sag', 'SUBSURF')
+    sub.levels = sub.render_levels = 1
     displacement = bag.modifiers.new('Canvas irregularity', 'DISPLACE')
     noise = bpy.data.textures.new('Knapsack deterministic clouds', type='CLOUDS')
     noise.noise_scale = .09
