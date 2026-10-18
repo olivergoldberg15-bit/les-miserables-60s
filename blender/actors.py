@@ -214,7 +214,9 @@ def _wardrobe(actor, files):
             if incoming:
                 luminance = nodes.new('ShaderNodeRGBToBW')
                 links.new(incoming.from_socket, luminance.inputs[0])
-                tinted = mix(1.0, luminance.outputs[0], garment, 'MULTIPLY')
+                # Flatten modern prints (argyle, logos) but keep folds from the normal map.
+                flat = mix(.7, luminance.outputs[0], (.42, .42, .42))
+                tinted = mix(1.0, flat, garment, 'MULTIPLY')
                 # Bare skin (face, neck, hands) keeps the original texture.
                 links.new(mix(split.outputs['Red'], tinted, incoming.from_socket), shader.inputs['Base Color'])
             else:

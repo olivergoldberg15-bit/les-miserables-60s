@@ -56,7 +56,7 @@ LOOKDEV_CAMERAS = {
     "town_gate": {"loc": (-88, -20, 3), "target": (-70, -8, 3), "lens_mm": 35, "time": "dusk"},
     "main_street": {"loc": (-65, -7, 2), "target": (-20, -1, 3), "lens_mm": 30, "time": "night"},
     "inn": {"loc": (-42, 1.4, 1.65), "target": (-47.8, 5.7, 1.15), "lens_mm": 26, "time": "interior_candle"},
-    "prison": {"loc": (-27.6, -7, 1.65), "target": (-24.5, -3.2, 1.5), "lens_mm": 28, "time": "interior_candle"},
+    "prison": {"loc": (-25.5, 4.5, 1.6), "target": (-25, -3, 1.5), "lens_mm": 35, "time": "dusk"},
     "kennel": {"loc": (-12, 2.3, 1.1), "target": (-12, 6.8, 0.6), "lens_mm": 35, "time": "night"},
     "cathedral": {"loc": (-24, -24, 16), "target": (2, 23, 17), "lens_mm": 34, "time": "night"},
     "hospital": {"loc": (111, -34, 11), "target": (90, 0, 6), "lens_mm": 40, "time": "dawn"},
@@ -456,9 +456,9 @@ class Town:
 
     def bed(self, name, x, y):
         self.box(name + "_frame", (x, y, .4), (1.3, 2.2, .22), "wood_planks", .02)
-        self.box(name + "_mattress", (x, y, .6), (1.2, 2.1, .22), "cloth_wool", .06)
-        self.box(name + "_blanket", (x, y - .25, .74), (1.24, 1.5, .1), "cloth_wool", .03)
-        self.box(name + "_pillow", (x, y + .78, .79), (.83, .43, .17), "cloth_wool", .07)
+        self.box(name + "_mattress", (x, y, .6), (1.2, 2.1, .22), "plaster", .06)
+        self.box(name + "_blanket", (x, y - .25, .74), (1.24, 1.5, .1), "cassock_black", .03)
+        self.box(name + "_pillow", (x, y + .78, .79), (.83, .43, .17), "plaster", .07)
         self.box(name + "_headboard", (x, y + 1.12, .7), (1.35, .12, 1.1), "wood_planks", .02)
 
 
