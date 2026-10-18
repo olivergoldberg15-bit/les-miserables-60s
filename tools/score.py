@@ -1,6 +1,6 @@
-"""Restrained period score (D minor -> D major on 'soul', swelling under 'weep' and end card)
-+ diegetic SFX keyed to data/timing.js cue words + narration -> audio/mix.wav (48 kHz, ~-16 LUFS).
-Run: python tools/score.py"""
+"""Deterministic piano score and synthesized SFX for SCRIPT.md -> audio/mix.wav.
+Run: python tools/score.py
+"""
 import json
 import os
 import re
@@ -11,8 +11,8 @@ import soundfile as sf
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SR = 48000
 
-with open(os.path.join(ROOT, "data", "timing.js"), encoding="utf-8") as _f:
-    TM = json.loads(_f.read().split("=", 1)[1].strip().rstrip(";"))
+with open(os.path.join(ROOT, "data", "timing.json"), encoding="utf-8") as _f:
+    TM = json.load(_f)
 
 DUR = float(TM["duration"])
 N = int(round(DUR * SR))
@@ -40,25 +40,49 @@ def shotRange(lid):
     return float(a), float(b)
 
 
-def cue(lid, word=None, nth=1):
-    if word is None:
-        target = norm(lid)
-        n = 0
-        for l in LINES:
-            for x in l["words"]:
-                if norm(x["w"]) == target:
-                    n += 1
-                    if n == nth:
-                        return float(x["s"])
-        raise KeyError((lid, nth))
-    target = norm(word)
-    n = 0
-    for x in LN[lid]["words"]:
-        if norm(x["w"]) == target:
-            n += 1
-            if n == nth:
-                return float(x["s"])
-    raise KeyError((lid, word, nth))
+def word_time(lid, word, nth=1, edge="s"):
+    if lid not in LN:
+        raise ValueError(f"Missing timing line: {lid!r}")
+    matches = [x for x in LN[lid]["words"] if norm(x["w"]) == norm(word)]
+    if nth < 1 or nth > len(matches):
+        raise ValueError(f"Missing cue: line={lid!r}, word={word!r}, occurrence={nth}")
+    return float(matches[nth - 1][edge])
+
+
+def cue(lid, word, nth=1):
+    return word_time(lid, word, nth)
+
+
+# Validate every scheduled word before allocating or synthesizing audio.
+PIANO_PLAN = {
+    "open": [("October", 69), ("walks", 65)],
+    "bread": [("Jean", 62), ("seven", 58)],
+    "years": [("Five", 50), ("Four", 65), ("nineteen", 62)],
+    "passport": [("passport", 57)],
+    "rejected": [("away", 55), ("prison", 53)],
+    "bishop": [("Bishop", 62), ("gave", 66), ("door", 69)],
+    "door": [("knocks", 62)],
+    "dinner": [("sir", 66), ("candlesticks", 69), ("dinner", 74)],
+    "night": [("At", 38), ("clock", 45)],
+    "bedside": [("stands", 38), ("iron", 46)],
+    "steal": [("takes", 38), ("jumps", 45)],
+    "caught": [("By", 33), ("police", 52), ("back", 58)],
+    "cliff": [("opens", 33), ("silver", 52), ("Valjean", 58), ("says", 61)],
+}
+SFX_CUES = [("open", "walks"), ("door", "knocks"), ("night", "clock"),
+            ("steal", "silver"), ("steal", "jumps"), ("caught", "police"),
+            ("cliff", "opens"), ("cliff", "says")]
+for lid, notes in PIANO_PLAN.items():
+    for word, _ in notes:
+        cue(lid, word)
+for lid, word in SFX_CUES:
+    cue(lid, word)
+CUT_TIME = word_time("cliff", "says", edge="e")
+CARD_TIME = CUT_TIME + 0.6
+CUT_SAMPLE = int(round(CUT_TIME * SR))
+CARD_SAMPLE = int(round(CARD_TIME * SR))
+if not 0 < CUT_SAMPLE < CARD_SAMPLE < N:
+    raise ValueError("Timing duration must include the cliffhanger silence and end-card note")
 
 
 rng = np.random.default_rng(1815)
@@ -111,9 +135,8 @@ def env_asr(n, att, rel):
 
 
 # -------------------------------------------------------------
-# 1. Restrained Period Score (Chamber Strings + Sparse Felt Piano)
-#    D minor in shots 1..10 -> resolves to D major on 'soul' ->
-#    swells softly under 'weep' and the end card.
+# 1. Sparse Felt Piano with Restrained Chamber Undertones
+#    Weary minor -> brief warmth -> low suspense -> unresolved dread.
 # -------------------------------------------------------------
 padL = np.zeros(N, dtype=np.float64)
 padR = np.zeros(N, dtype=np.float64)
@@ -180,189 +203,54 @@ def add_piano_note(t0, midi, dur=2.2, vel=0.65, pan=0.0):
     add_stereo(pianoL, pianoR, t0 + 0.145, fft_filter(out, hi=1200.0) * 0.14, gain=0.052, pan=pan * 0.4)
 
 
-# Score harmonic plan across the 14 shots:
-# Shots 1-10 stay in D minor (and relative/subdominant minor colors);
-# Shot 11 ('soul') resolves from suspension into warm D major on 'soul';
-# Shots 13 ('weep') and 14 ('end') swell softly in D major.
-SHOT_CHORDS_DM = {
-    "open":     ([38, 45, 50, 53, 57], 0.013, 1200.0),      # Dm (D2 A2 D3 F3 A3)
-    "bread":    ([43, 50, 55, 58, 62], 0.012, 1150.0),      # Gm
-    "years":    ([34, 41, 50, 53, 57], 0.012, 1100.0),      # Bbmaj7
-    "passport": ([38, 45, 50, 53, 60], 0.012, 1150.0),      # Dm7
-    "rejected": ([40, 46, 50, 55, 58], 0.012, 1100.0),      # Em7b5
-    "door":     ([38, 45, 50, 53, 57, 62], 0.013, 1300.0),  # Dm (warmer voicing)
-    "dinner":   ([41, 48, 53, 57, 60, 62], 0.014, 1400.0),  # F6 / Dm7
-    "steal":    ([43, 50, 55, 58], 0.011, 1050.0),          # Gm (tense, darker)
-    "caught":   ([33, 45, 52, 55, 61], 0.012, 1100.0),      # A7 (dominant tension)
-    "gift":     ([43, 50, 53, 58, 62], 0.013, 1250.0),      # Gm7 -> prepares resolution
-}
-
-for lid, (notes, gain, cutoff) in SHOT_CHORDS_DM.items():
+# Sparse weary piano, a brief warm major color, then low unresolved dread.
+# Keep strings absent in the weary opening and nearly subliminal thereafter.
+for lid, notes, gain in [
+    ("bishop", [38, 50, 54, 57], 0.0025),
+    ("door", [38, 50, 54, 57], 0.0025),
+    ("dinner", [41, 53, 57, 62], 0.003),
+    ("night", [26, 38, 45], 0.002),
+    ("bedside", [26, 38, 46], 0.0025),
+    ("steal", [26, 38, 45], 0.003),
+    ("caught", [33, 45, 52, 58], 0.004),
+    ("cliff", [33, 45, 52, 58, 61], 0.005),
+]:
     a, b = shotRange(lid)
-    dur = (b - a) + 0.65
-    sL, sR = synth_string_chord(notes, dur, cutoff=cutoff)
-    add(padL, max(0.0, a - 0.15), sL, gain)
-    add(padR, max(0.0, a - 0.15), sR, gain)
+    sL, sR = synth_string_chord(notes, b - a + 0.5, cutoff=950.0)
+    add(padL, a, sL, gain)
+    add(padR, a, sR, gain)
 
-# Shot 11 ('soul'): begins on a quiet Dsus2/Dm whisper, then resolves to luminous D major on the 'soul' line
-soul_a, soul_b = shotRange("soul")
-t_soul_quote = cue("soul", "You")
-t_soul_word = cue("soul", "soul")
-# Pre-resolution quiet suspension (D2 A2 D3 E3 A3)
-sL, sR = synth_string_chord([38, 45, 50, 52, 57], max(0.8, t_soul_quote - soul_a + 0.5), cutoff=1250.0)
-add(padL, soul_a - 0.1, sL, 0.012)
-add(padR, soul_a - 0.1, sR, 0.012)
-# D major resolution entering gently on "You" and blossoming on "soul" (D2 A2 D3 F#3 A3 D4 F#4)
-sL, sR = synth_string_chord([38, 45, 50, 54, 57, 62, 66], (soul_b - t_soul_quote) + 0.8, cutoff=1750.0)
-add(padL, t_soul_quote - 0.1, sL, 0.016)
-add(padR, t_soul_quote - 0.1, sR, 0.016)
+for lid, notes in PIANO_PLAN.items():
+    vel = 0.46 if IDX[lid] < IDX["bishop"] else 0.54
+    if IDX[lid] >= IDX["night"]:
+        vel = 0.43 + 0.025 * (IDX[lid] - IDX["night"])
+    for i, (word, midi) in enumerate(notes):
+        add_piano_note(cue(lid, word), midi, 2.8, vel, (-0.12, 0.12)[i % 2])
 
-# Shot 12 ('coin'): poignant B minor7 / Gmaj7 (within D major key)
-coin_a, coin_b = shotRange("coin")
-sL, sR = synth_string_chord([43, 50, 54, 59, 62], (coin_b - coin_a) + 0.6, cutoff=1350.0)
-add(padL, coin_a - 0.15, sL, 0.013)
-add(padR, coin_a - 0.15, sR, 0.013)
-
-# Shot 13 ('weep'): soft emotional swell in D major (Gmaj9 -> D/F# -> A6)
-weep_a, weep_b = shotRange("weep")
-t_weep_word = cue("weep", "weeps")
-sL1, sR1 = synth_string_chord([43, 50, 54, 59, 62, 66], (weep_b - weep_a) + 0.7, cutoff=1950.0, vib_depth=0.045)
-add(padL, weep_a - 0.15, sL1, 0.018)
-add(padR, weep_a - 0.15, sR1, 0.018)
-sL2, sR2 = synth_string_chord([38, 45, 54, 57, 62, 66, 69], (weep_b - t_weep_word) + 0.9, cutoff=2100.0, vib_depth=0.05)
-add(padL, t_weep_word - 0.1, sL2, 0.016)
-add(padR, t_weep_word - 0.1, sR2, 0.016)
-
-# Shot 14 ('end'): warm D major swell under the final line and end card ("LES MISERABLES")
-end_a, end_b = shotRange("end")
-t_end_card = cue("end", "Les")
-sL3, sR3 = synth_string_chord([38, 45, 50, 54, 57, 62, 66], (end_b - end_a), cutoff=1950.0, vib_depth=0.045)
-add(padL, end_a - 0.2, sL3, 0.018)
-add(padR, end_a - 0.2, sR3, 0.018)
-# End-card D major warm glow (D2 A2 D3 F#3 A3 D4 F#4 A4)
-sL4, sR4 = synth_string_chord([38, 45, 50, 54, 57, 62, 66, 69], max(1.2, DUR - t_end_card + 0.2), cutoff=2250.0, vib_depth=0.05)
-add(padL, t_end_card - 0.15, sL4, 0.022)
-add(padR, t_end_card - 0.15, sR4, 0.022)
-
-
-# Sparse Piano Motif:
-# In D minor through shots 1..10 (using D4=62, E4=64, F4=65, G4=67, A4=69, Bb4=70),
-# resolving to D major (F#4=66, A4=69, D5=74) on 'soul', and singing softly in 'weep' and 'end'.
-def schedule_piano():
-    # Shot 1 ('open'): sparse D minor motif (A4 - F4 - E4 - D4)
-    a, b = shotRange("open")
-    add_piano_note(a + 0.25, 69, 2.4, 0.60, -0.15)
-    add_piano_note(cue("open", "October") + 0.55, 65, 2.2, 0.54, 0.10)
-    add_piano_note(cue("open", "walks") + 0.15, 64, 1.9, 0.50, -0.08)
-    add_piano_note(lineEnd("open") - 0.15, 62, 2.6, 0.58, 0.12)
-
-    # Shot 2 ('bread'): plaintive Gm answer (Bb4 - A4 - G4)
-    add_piano_note(lineStart("bread") + 0.15, 70, 2.1, 0.52, 0.18)
-    add_piano_note(cue("bread", "seven"), 69, 1.9, 0.48, -0.12)
-    add_piano_note(lineEnd("bread") - 0.1, 67, 2.3, 0.52, 0.08)
-
-    # Shot 3 ('years'): low tolling fifth + F4 - E4 - D4
-    add_piano_note(lineStart("years") + 0.1, 50, 2.8, 0.56, -0.20)
-    add_piano_note(cue("years", "Four") - 0.15, 65, 2.0, 0.50, 0.14)
-    add_piano_note(cue("years", "nineteen"), 62, 2.5, 0.55, -0.10)
-
-    # Shot 4 ('passport'): single sparse minor reflection (A4 - F4)
-    add_piano_note(lineStart("passport") + 0.2, 69, 2.1, 0.48, 0.12)
-    add_piano_note(lineEnd("passport") - 0.1, 65, 2.3, 0.50, -0.14)
-
-    # Shot 5 ('rejected'): descending minor step (G4 - F4 - E4)
-    add_piano_note(cue("rejected", "away") + 0.1, 67, 1.8, 0.48, -0.15)
-    add_piano_note(cue("rejected", "prison") + 0.25, 65, 1.8, 0.46, 0.12)
-    add_piano_note(lineEnd("rejected") - 0.05, 64, 2.1, 0.50, -0.08)
-
-    # Shot 6 ('door'): warm fifth lift as the bishop's door opens (D4 - A4 - F4)
-    add_piano_note(cue("door", "Bishop"), 62, 2.2, 0.52, -0.12)
-    add_piano_note(lineEnd("door") - 0.1, 69, 2.4, 0.58, 0.15)
-
-    # Shot 7 ('dinner'): gentle warm interior motif (F4 - A4 - C5 - A4)
-    add_piano_note(cue("dinner", "sir") + 0.1, 65, 2.2, 0.55, -0.14)
-    add_piano_note(cue("dinner", "candlesticks") + 0.15, 69, 2.2, 0.58, 0.14)
-    add_piano_note(lineEnd("dinner") - 0.1, 72, 2.5, 0.54, 0.05)
-
-    # Shot 8 ('steal'): nocturnal low Dm/Gm pulse (D3 - Bb3 - A3)
-    add_piano_note(lineStart("steal") + 0.15, 50, 2.4, 0.50, -0.18)
-    add_piano_note(cue("steal", "steals"), 58, 2.0, 0.48, 0.12)
-    add_piano_note(cue("steal", "jumps"), 57, 2.0, 0.48, -0.10)
-
-    # Shot 9 ('caught'): low dominant tension (A3 - G4 - E4)
-    add_piano_note(lineStart("caught") + 0.1, 57, 2.2, 0.52, -0.15)
-    add_piano_note(lineEnd("caught") - 0.1, 64, 2.2, 0.50, 0.12)
-
-    # Shot 10 ('gift'): gentle questioning motif preparing D major (G4 - F4 - E4 - A4)
-    add_piano_note(cue("gift", "candlesticks"), 67, 2.1, 0.54, -0.12)
-    add_piano_note(cue("gift", "Why"), 64, 2.0, 0.52, 0.14)
-    add_piano_note(lineEnd("gift") - 0.05, 69, 2.5, 0.56, 0.0)
-
-    # Shot 11 ('soul'): RESOLVES TO D MAJOR (F#4 = 66, A4 = 69, D5 = 74)
-    add_piano_note(cue("soul", "You"), 66, 2.8, 0.64, -0.12)       # F#4 (major third!)
-    add_piano_note(cue("soul", "evil") + 0.15, 69, 2.6, 0.62, 0.14)  # A4
-    add_piano_note(cue("soul", "soul"), 50, 3.4, 0.66, -0.20)       # D3 bass anchor
-    add_piano_note(cue("soul", "soul") + 0.04, 66, 3.2, 0.68, 0.05) # F#4
-    add_piano_note(cue("soul", "soul") + 0.10, 74, 3.2, 0.72, 0.18) # D5 luminous resolution
-    add_piano_note(lineEnd("soul") + 0.05, 69, 2.8, 0.62, -0.08)    # A4
-
-    # Shot 12 ('coin'): sparse reflective D major / Bm notes (F#4 - D4 - E4)
-    add_piano_note(lineStart("coin") + 0.2, 66, 2.2, 0.52, -0.10)
-    add_piano_note(lineEnd("coin") + 0.05, 62, 2.4, 0.54, 0.12)
-
-    # Shot 13 ('weep'): tender D major motif swelling under 'weep' (F#4 - A4 - B4 - A4 - F#4 - D5)
-    add_piano_note(lineStart("weep") + 0.05, 66, 2.6, 0.64, -0.15)
-    add_piano_note(cue("weep", "weeps"), 50, 3.2, 0.68, -0.22)
-    add_piano_note(cue("weep", "weeps") + 0.05, 69, 2.8, 0.72, 0.12)
-    add_piano_note(cue("weep", "first"), 71, 2.5, 0.68, 0.18)
-    add_piano_note(cue("weep", "nineteen"), 66, 2.8, 0.70, -0.10)
-    add_piano_note(lineEnd("weep") + 0.05, 74, 3.0, 0.74, 0.14)
-
-    # Shot 14 ('end'): noble D major cadence swelling into the end card ("LES MISERABLES")
-    add_piano_note(lineStart("end") + 0.1, 66, 2.6, 0.64, -0.14)
-    add_piano_note(cue("end", "road") + 0.1, 69, 2.6, 0.66, 0.12)
-    t_les = cue("end", "Les")
-    add_piano_note(t_les - 0.05, 38, 3.5, 0.76, -0.20)   # D2
-    add_piano_note(t_les, 50, 3.5, 0.74, -0.10)          # D3
-    add_piano_note(t_les + 0.05, 66, 3.4, 0.78, 0.08)    # F#4
-    add_piano_note(t_les + 0.12, 69, 3.3, 0.76, 0.16)    # A4
-    add_piano_note(lineEnd("end") + 0.15, 74, 2.6, 0.80, 0.0)   # D5 final bell-like tonic
-    add_piano_note(lineEnd("end") + 0.65, 66, 2.1, 0.68, -0.12) # F#4 warm third
-
-
-schedule_piano()
-
-# Shape overall score dynamics: restrained in shots 1..10, warming on 'soul',
-# swelling softly under 'weep' and the end card, ducking smoothly under speech.
+# Duck smoothly under narration; increase tension through caught and cliff.
 tt = np.arange(N) / SR
 speech_gate = np.zeros(N, dtype=np.float64)
 for l in LINES:
     s_idx = max(0, int((l["start"] - 0.08) * SR))
     e_idx = min(N, int((l["end"] + 0.12) * SR))
     speech_gate[s_idx:e_idx] = 1.0
-
 win_len = int(0.18 * SR)
-speech_env = np.convolve(speech_gate, np.ones(win_len) / win_len, mode="same")
-
-# Swell curve tied to cue/shot times (no hard-coded times)
-swell = np.ones(N, dtype=np.float64) * 0.88
-# Warm lift on 'soul'
-soul_swell = 0.22 * np.clip((tt - cue("soul", "You")) / 1.2, 0.0, 1.0) * np.clip((shotRange("coin")[0] + 0.6 - tt) / 0.9, 0.0, 1.0)
-# Soft swell under 'weep' and the end card
-weep_start = shotRange("weep")[0]
-weep_swell = 0.48 * np.clip((tt - weep_start) / 1.4, 0.0, 1.0)
-end_card_swell = 0.32 * np.clip((tt - (cue("end", "Les") - 0.2)) / 0.9, 0.0, 1.0)
-swell = swell + soul_swell + weep_swell + end_card_swell
-
-# Fade in at start, smooth fade out at the very end of TIMING.duration
-fade_in = np.clip(tt / 0.7, 0.0, 1.0)
-fade_out = np.clip((DUR - tt) / 0.75, 0.0, 1.0)
-# Duck music under speech (less ducking during 'weep' and 'end' so the soft swell is felt)
-duck_depth = np.where(tt >= weep_start, 0.38, 0.52)
-music_gain = fade_in * fade_out * swell * (1.0 - duck_depth * speech_env)
-
+# Cumulative sum gives the same centered box smoothing without a long convolution.
+cs = np.concatenate(([0.0], np.cumsum(np.pad(speech_gate, (win_len // 2, (win_len - 1) // 2)))))
+speech_env = (cs[win_len:] - cs[:-win_len]) / win_len
+swell = 0.88 + 0.45 * np.clip((tt - lineStart("caught")) / (CUT_TIME - lineStart("caught")), 0, 1)
+music_gain = np.clip(tt / 0.7, 0, 1) * swell * (1.0 - 0.52 * speech_env)
 musicL = (padL + pianoL) * music_gain
 musicR = (padR + pianoR) * music_gain
+musicL[CUT_SAMPLE:] = 0.0
+musicR[CUT_SAMPLE:] = 0.0
+
+# One quiet low note after the exact 0.6-second silence, ringing to file end.
+pianoL.fill(0.0)
+pianoR.fill(0.0)
+add_piano_note(CARD_TIME, 38, DUR - CARD_TIME, 0.38, 0.0)
+musicL += pianoL
+musicR += pianoR
 
 
 # -------------------------------------------------------------
@@ -597,63 +485,43 @@ def sfx_coin_roll_and_stop(t0, gain=0.28):
     add_stereo(sfxL, sfxR, t0, sig, gain=gain, pan=0.06)
 
 
-# Schedule all required SFX keyed to data/timing.js cues:
-# 1. Footsteps on gravel under 'open'
+def sfx_cathedral_bell(t0, gain=0.045):
+    """Deep inharmonic bell with a soft attack and long decay."""
+    n = int(4.5 * SR)
+    t = np.arange(n) / SR
+    sig = np.zeros(n)
+    for ratio, amp, decay in [(0.5, 0.7, 2.8), (1, 1, 2.2), (1.506, 0.45, 1.7),
+                              (2, 0.25, 1.2), (2.514, 0.16, 0.8)]:
+        sig += amp * np.sin(2 * np.pi * 130.81 * ratio * t) * env_ad(n, 0.008, decay)
+    add_stereo(sfxL, sfxR, t0, sig, gain=gain, pan=0.0)
+
+
+def sfx_door_creak(t0, gain=0.035):
+    """Quiet wooden hinge strain, with irregular friction and resonance."""
+    n = int(0.85 * SR)
+    t = np.arange(n) / SR
+    freq = 170 + 55 * np.sin(np.pi * t / 0.85) + 9 * np.sin(2 * np.pi * 13 * t)
+    phase = 2 * np.pi * np.cumsum(freq) / SR
+    creak = (np.sin(phase) + 0.35 * np.sin(2.07 * phase))
+    creak += 0.25 * fft_filter(rng.standard_normal(n), lo=180, hi=1500)
+    creak *= env_asr(n, 0.08, 0.2) * (0.7 + 0.3 * np.sin(2 * np.pi * 19 * t))
+    add_stereo(sfxL, sfxR, t0, creak, gain=gain, pan=-0.1)
+
+
 open_a, open_b = shotRange("open")
 t_walks = cue("open", "walks")
-step_t = open_a + 0.22
-step_i = 0
-while step_t < open_b - 0.20:
-    # Emphasize footsteps around "walks"
+for i, step_t in enumerate(np.arange(open_a + 0.22, open_b - 0.24, 0.56)):
     near_walks = np.exp(-((step_t - t_walks) / 1.4) ** 2)
-    sfx_gravel_step(step_t, gain=0.11 + 0.05 * near_walks, pan=-0.08 + 0.16 * (step_i % 2))
-    step_t += 0.56
-    step_i += 1
-
-# 2. Glass shatter on 'stole'
-sfx_glass_shatter(cue("bread", "stole"))
-
-# 3. Scratch ticks across 'years' (on 'Five', 'years', and across 'Four' .. 'nineteen')
-t_five = cue("years", "Five")
-t_years_word = cue("years", "years")
-t_four = cue("years", "Four")
-t_nineteen = cue("years", "nineteen")
-sfx_scratch_tick(t_five, dur=0.13, gain=0.17, pan=-0.12)
-sfx_scratch_tick(t_years_word, dur=0.14, gain=0.16, pan=-0.06)
-for esc_i in range(4):
-    t_esc = t_four + (t_nineteen - t_four) * (esc_i / 4.0)
-    sfx_scratch_tick(t_esc, dur=0.13, gain=0.17, pan=-0.08 + 0.06 * esc_i)
-sfx_scratch_tick(t_nineteen, dur=0.18, gain=0.20, pan=0.12)
-
-# 4. Paper rustle on 'passport'
-sfx_paper_rustle(cue("passport", "passport"))
-
-# 5. Door slam on 'Inns'
-sfx_door_slam(cue("rejected", "Inns"))
-
-# 6. Wicket clack on 'prison'
-sfx_wicket_clack(cue("rejected", "prison"))
-
-# 7. Low dog growl on 'kennel'
-sfx_dog_growl(cue("rejected", "kennel"))
-
-# 8. Three knocks on 'knocks'
-sfx_three_knocks(cue("door", "knocks"))
-
-# 9. Match strike on 'lights'
-sfx_match_strike(cue("dinner", "lights"))
-
-# 10. Silver clink on 'silver' in 'steal'
-sfx_silver_clink(cue("steal", "silver"))
-
-# 11. Thud on 'wall'
-sfx_wall_thud(cue("steal", "wall"))
-
-# 12. Boots on 'police'
-sfx_police_boots(cue("caught", "police"))
-
-# 13. Coin roll and stop on 'coin'
-sfx_coin_roll_and_stop(cue("coin", "coin"))
+    sfx_gravel_step(step_t, gain=0.025 + 0.015 * near_walks, pan=(-0.08, 0.08)[i % 2])
+sfx_three_knocks(cue("door", "knocks"), gain=0.09)
+for off in (0.0, 1.1):
+    sfx_cathedral_bell(cue("night", "clock") + off)
+sfx_silver_clink(cue("steal", "silver"), gain=0.035)
+sfx_wall_thud(cue("steal", "jumps"), gain=0.075)
+sfx_police_boots(cue("caught", "police"), gain=0.07)
+sfx_door_creak(cue("cliff", "opens"))
+sfxL[CUT_SAMPLE:] = 0.0
+sfxR[CUT_SAMPLE:] = 0.0
 
 
 # -------------------------------------------------------------
@@ -672,6 +540,9 @@ left = vo + musicL + sfxL
 right = vo + musicR + sfxR
 
 st = np.stack([left, right], axis=1)
+# Cut narration as well: no room tone or synthesis tail in the cliffhanger gap.
+st[CUT_SAMPLE:CARD_SAMPLE] = 0.0
+st[CARD_SAMPLE:] = np.stack([musicL[CARD_SAMPLE:], musicR[CARD_SAMPLE:]], axis=1)
 peak = max(1e-9, float(np.abs(st).max()))
 st = st / (peak / 0.89)
 
@@ -716,6 +587,9 @@ if len(mix_data) != N:
         mix_data = np.pad(mix_data, pad_width)
     else:
         mix_data = mix_data[:N]
-    sf.write(out_wav, mix_data, SR, subtype="PCM_16")
+
+# Reassert the hard edit after loudnorm/resampling to remove any filter ringing.
+mix_data[CUT_SAMPLE:CARD_SAMPLE] = 0
+sf.write(out_wav, mix_data, SR, subtype="PCM_16")
 
 print(f"mix written: {out_wav} ({N / SR:.3f} s, {SR} Hz, target -16 LUFS)")
