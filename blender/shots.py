@@ -17,6 +17,17 @@ SHOT_IDS = ('open', 'bread', 'years', 'passport', 'rejected', 'bishop',
             'door', 'dinner', 'night', 'bedside', 'steal', 'caught', 'cliff')
 
 
+def walk(col):
+    """Objects in a collection tree, walked directly. The cached recursive object
+    list can dangle after clip imports are deleted and segfault Blender 4.2."""
+    seen = set()
+    for c in (col, *col.children_recursive):
+        for obj in c.objects:
+            if obj.name not in seen:
+                seen.add(obj.name)
+                yield obj
+
+
 def key(obj, path, value, frame, constant=False):
     setattr(obj, path, value)
     obj.keyframe_insert(data_path=path, frame=frame)
@@ -186,7 +197,7 @@ def build(ctx):
     take = cue('bread', 'loaf')
     key(loaf, 'location', (-240, 86.4, 1.2), take)
     key(loaf, 'location', (-240, 85.2, 1.25), word_end('bread', 'bread'))
-    for obj in ctx.col('bakery_flashback').all_objects:
+    for obj in walk(ctx.col('bakery_flashback')):
         if obj.get('breakable'):
             key(obj, 'hide_render', False, a, True)
             key(obj, 'hide_render', True, cue('bread', 'stole'), True)
@@ -339,7 +350,7 @@ def build(ctx):
     # switches to renderable objects because collection flags cannot be keyed.
     for name in LOCATIONS:
         col = ctx.col(name)
-        for obj in col.all_objects:
+        for obj in walk(col):
             if name.endswith('_flashback'):
                 sid = 'bread' if name.startswith('bakery') else 'years'
                 # Preserve the timed broken-pane visibility above.
@@ -353,7 +364,7 @@ def build(ctx):
                   'bishop': ['bishop', 'dinner', 'bedside', 'cliff']}
     for name in ('valjean', 'bishop', 'gendarme_1', 'gendarme_2', 'gendarme_3'):
         allowed = actor_shots.get(name, ['caught', 'cliff'])
-        for obj in ctx.col('ACTOR_' + name).all_objects:
+        for obj in walk(ctx.col('ACTOR_' + name)):
             key(obj, 'hide_render', True, 1, True)
             for sid in allowed:
                 a, b = ranges[sid]
