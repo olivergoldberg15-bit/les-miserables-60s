@@ -1,4 +1,7 @@
 """Headless entry point: assets -> world -> props -> actors -> shots."""
+import faulthandler
+import sys as _sys
+faulthandler.enable(file=_sys.stderr, all_threads=True)  # print the Python stack if Blender segfaults
 import argparse
 import importlib
 import json

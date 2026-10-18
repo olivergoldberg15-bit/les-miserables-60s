@@ -72,7 +72,7 @@ jobs:
           MODE: ${{ inputs.mode }}
         run: |
           .cache/blender/blender --version
-          .cache/blender/blender -b --factory-startup --python-exit-code 1 -P blender/build.py -- --mode "$MODE" --prepare-assets --out build/lesmis.blend
+          .cache/blender/blender -b --factory-startup --python-exit-code 1 -P blender/build.py -- --mode "$MODE" --prepare-assets --out build/lesmis.blend || { cat /tmp/blender.crash.txt 2>/dev/null | head -60; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
           name: scene
