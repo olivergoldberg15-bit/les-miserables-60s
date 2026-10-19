@@ -162,13 +162,15 @@ def build(ctx):
         forward = sum(knees, Vector()) / len(knees) - hip
         forward.z = 0
         forward.normalize()
-        # Hip joints sit about 9 cm above the seat surface.
-        top = min(h.z for h in hips) - .09
+        # Hip joints sit about 10 cm above the seat surface. This clip sits high
+        # (hips ~0.88 m), so the bench is a waist-high stone ledge.
+        top = min(h.z for h in hips) - .10
         print(f'[shots] galley bench top={top:.3f} hip=({hip.x:.2f},{hip.y:.2f},{hip.z:.2f}) '
               f'forward=({forward.x:.2f},{forward.y:.2f})', flush=True)
-        top = min(max(top, .3), .65)
-        # Local +X is his forward: the seat runs from behind the hips to just short of the knees.
-        verts = [(x, y, z) for z in (0, top) for x, y in ((-.34, -.75), (.12, -.75), (.12, .75), (-.34, .75))]
+        top = min(max(top, .3), .85)
+        # Local +X is his forward: the seat ends just past the hip joints so the
+        # sloping thighs clear its front edge.
+        verts = [(x, y, z) for z in (0, top) for x, y in ((-.4, -.75), (.04, -.75), (.04, .75), (-.4, .75))]
         mesh = bpy.data.meshes.new('galley_bench')
         mesh.from_pydata(verts, [], [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
                                      (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)])
