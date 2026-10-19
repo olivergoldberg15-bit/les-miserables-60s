@@ -15,6 +15,18 @@ def chunk_range(first, last, chunk, chunks):
     return first + count * chunk // chunks, first + count * (chunk + 1) // chunks - 1
 
 
+def frame_list(spec):
+    """Parse '1,240' or '302-392' (or a mix) into frame numbers."""
+    frames = []
+    for part in (value.strip() for value in spec.split(',')):
+        if '-' in part:
+            first, last = (int(v) for v in part.split('-'))
+            frames.extend(range(first, last + 1))
+        elif part:
+            frames.append(int(part))
+    return frames
+
+
 def configure(scene, preview):
     scene.render.engine = 'CYCLES'
     scene.cycles.device = 'CPU'
@@ -95,7 +107,7 @@ def render_lineup(bpy, scene, ctx, lineup, out):
 def main(args):
     import bpy
     scene = bpy.context.scene
-    configure(scene, args.mode != 'full')
+    configure(scene, args.mode not in ('full', 'patch'))
     out = Path(args.out).resolve()
     out.mkdir(parents=True, exist_ok=True)
     if args.mode == 'lookdev':
@@ -122,12 +134,16 @@ def main(args):
         if lineup:
             render_lineup(bpy, scene, ctx, lineup, out)
         return
-    if args.mode == 'stills':
-        frames = [int(value.strip()) for value in args.frames.split(',') if value.strip()]
+    if args.mode in ('stills', 'patch'):
+        frames = frame_list(args.frames)
         if not frames:
-            raise ValueError('[render:stills] --frames must contain at least one frame')
+            raise ValueError(f'[render:{args.mode}] --frames must contain at least one frame')
         if any(frame < scene.frame_start or frame > scene.frame_end for frame in frames):
-            raise ValueError('[render:stills] requested frame outside film')
+            raise ValueError(f'[render:{args.mode}] requested frame outside film')
+        if args.mode == 'patch':
+            # Final-quality re-render of the listed frames, split into contiguous chunks.
+            first, last = chunk_range(0, len(frames) - 1, args.chunk, args.chunks)
+            frames = frames[first:last + 1]
     else:
         start, end = chunk_range(scene.frame_start, scene.frame_end, args.chunk, args.chunks)
         frames = range(start, end + 1)
@@ -141,7 +157,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=['lookdev', 'stills', 'full'], required=True)
+    parser.add_argument('--mode', choices=['lookdev', 'stills', 'full', 'patch'], required=True)
     parser.add_argument('--frames', default='1')
     parser.add_argument('--chunk', type=int, default=0)
     parser.add_argument('--chunks', type=int, default=20)

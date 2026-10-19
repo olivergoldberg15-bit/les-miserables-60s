@@ -147,6 +147,49 @@ def build(ctx):
             key(obj, 'rotation_euler', rot, frame, True)
         return obj
 
+    def galley_bench(a, b):
+        """Stone bench under Valjean's seated clip, sized from his evaluated hips and knees."""
+        rig = actors.ACTORS['valjean'].rig
+        joints = {k: [p for p in rig.pose.bones if p.name.lower().replace(' ', '').endswith(k)] for k in ('thigh', 'calf')}
+        hips, knees = [], []
+        for f in (a, (a+b)//2, b):
+            scene.frame_set(f)
+            hips += [rig.matrix_world @ p.head for p in joints['thigh']]
+            knees += [rig.matrix_world @ p.head for p in joints['calf']]
+        if not hips or not knees:
+            raise RuntimeError('[shots] galley bench: thigh/calf bones not found')
+        hip = sum(hips, Vector()) / len(hips)
+        forward = sum(knees, Vector()) / len(knees) - hip
+        forward.z = 0
+        forward.normalize()
+        # Hip joints sit about 9 cm above the seat surface.
+        top = min(h.z for h in hips) - .09
+        print(f'[shots] galley bench top={top:.3f} hip=({hip.x:.2f},{hip.y:.2f},{hip.z:.2f}) '
+              f'forward=({forward.x:.2f},{forward.y:.2f})', flush=True)
+        top = min(max(top, .3), .65)
+        # Local +X is his forward: the seat runs from behind the hips to just short of the knees.
+        verts = [(x, y, z) for z in (0, top) for x, y in ((-.34, -.75), (.12, -.75), (.12, .75), (-.34, .75))]
+        mesh = bpy.data.meshes.new('galley_bench')
+        mesh.from_pydata(verts, [], [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
+                                     (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)])
+        # Wall stone in object metres (one tile ~3.3 m) so the blocks match the cell walls.
+        stone = bpy.data.materials['MAT_world_limestone_wall'].copy()
+        stone.name = 'MAT_galley_bench'
+        nodes = stone.node_tree.nodes
+        mapping = next(n for n in nodes if n.type == 'MAPPING')
+        coords = next(n for n in nodes if n.type == 'TEX_COORD')
+        stone.node_tree.links.new(coords.outputs['Object'], mapping.inputs['Vector'])
+        mapping.inputs['Scale'].default_value = (.3,) * 3
+        mesh.materials.append(stone)
+        mesh.update()
+        bench = bpy.data.objects.new('galley_bench', mesh)
+        ctx.col('galley_flashback').objects.link(bench)
+        bench.location = (hip.x, hip.y, 0)
+        bench.rotation_euler = (0, 0, math.atan2(forward.y, forward.x))
+        bevel = bench.modifiers.new('worn_edges', 'BEVEL')
+        bevel.width, bevel.segments = .02, 2
+        return bench
+
     # Bake preset HDRIs into an animatable world shader. World pointers and image
     # pointers cannot be keyframed, whereas shader socket values can.
     master = bpy.data.worlds.new('FILM_WORLD')
@@ -204,7 +247,9 @@ def build(ctx):
 
     a, b = ranges['years']
     camera('years', 'galley_flashback', a, b, end_loc=(-237.7, 122, 1.6))
-    block('valjean', (-241.8, 124.5, 0), a, b, 'crouch_idle', rot=-math.pi/2)
+    # Seated on a stone bench; the crouch read as perching on the stick.
+    block('valjean', (-241.8, 124.5, 0), a, b, 'sit_chair_idle', rot=-math.pi/2)
+    galley_bench(a, b)
     prop('iron_chain', (-242.5, 124.7, 1), a)
     light('GALLEY_WINDOW', (-240, 128.5, 2.5), (-242, 124, 1), a, b, 160, (.4, .55, 1), .5)
 
@@ -447,6 +492,9 @@ def build(ctx):
                 a, b = ranges[sid]
                 key(obj, 'hide_render', False, a, True)
                 key(obj, 'hide_render', True, min(b+1, cut), True)
+    # No walking stick in the galleys; it returns with the passport shot.
+    for part in ('walking_stick', 'iron_ferrule'):
+        key(bpy.data.objects['valjean_' + part], 'hide_render', True, ranges['years'][0], True)
     # Hide unused prop roots, revealing only their scheduled scenes.
     usage = {'yellow_passport': ['passport'], 'bakery_loaf': ['bread'],
              'iron_chain': ['years'], 'iron_candlestick': ['bedside'],
